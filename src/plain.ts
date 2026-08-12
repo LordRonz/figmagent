@@ -85,7 +85,8 @@ export function sanitizeFilename(value: string): string {
 
 export function countNodes(nodes: Array<{ children?: unknown[] }>): number {
   return nodes.reduce(
-    (total, node) => total + 1 + countNodes((node.children ?? []) as Array<{ children?: unknown[] }>),
+    (total, node) =>
+      total + 1 + countNodes((node.children ?? []) as Array<{ children?: unknown[] }>),
     0,
   );
 }

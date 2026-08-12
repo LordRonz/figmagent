@@ -58,7 +58,9 @@ npm run typecheck   # strict TypeScript check
 npm test            # focused node:test serializer checks
 npm run benchmark   # o200k_base token comparison
 npm run build       # dist/code.js and dist/ui.html
-npm run check       # typecheck, tests, and production build
+npm run lint        # Biome linting
+npm run format      # Biome formatting
+npm run check       # lint, format check, typecheck, tests, and production build
 ```
 
 The benchmark enforces at least 30% median token savings against pretty JSON and rejects `FIGM/1` if it becomes materially larger than compact JSON. Current representative fixtures cover Auto Layout, absolute geometry, mixed rich text, gradients, effects, variables, instances, variants, hidden content, interactions, escaping, warnings, and assets.

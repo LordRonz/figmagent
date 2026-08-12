@@ -20,7 +20,8 @@ function simplePaint(value: JsonValue | undefined): string | undefined {
   if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0])) return undefined;
   const paint = value[0];
   if (paint.type !== "SOLID" || typeof paint.color !== "string") return undefined;
-  const opacity = typeof paint.opacity === "number" && paint.opacity !== 1 ? `/${paint.opacity}` : "";
+  const opacity =
+    typeof paint.opacity === "number" && paint.opacity !== 1 ? `/${paint.opacity}` : "";
   return `${paint.color}${opacity}`;
 }
 
@@ -80,7 +81,8 @@ function nodeLine(node: DesignNode, depth: number, context: DesignContext): stri
   const parts = [node.type, quote(node.name), `id=${quote(node.id)}`];
   const width = geometry.width;
   const height = geometry.height;
-  if (typeof width === "number" && typeof height === "number") parts.push(`size=${width}x${height}`);
+  if (typeof width === "number" && typeof height === "number")
+    parts.push(`size=${width}x${height}`);
   const x = geometry.x;
   const y = geometry.y;
   if ((typeof x === "number" && x !== 0) || (typeof y === "number" && y !== 0)) {
@@ -93,12 +95,22 @@ function nodeLine(node: DesignNode, depth: number, context: DesignContext): stri
 
   const fill = simplePaint(node.appearance?.fills);
   if (fill) parts.push(`fill=${fill}`);
-  pushSection(parts, node.appearance ? (namedStyleIds(node.appearance, context) as Record<string, JsonValue>) : undefined, new Set(fill ? ["fills"] : []));
+  pushSection(
+    parts,
+    node.appearance
+      ? (namedStyleIds(node.appearance, context) as Record<string, JsonValue>)
+      : undefined,
+    new Set(fill ? ["fills"] : []),
+  );
 
   if (node.text) {
     const characters = node.text.characters;
     if (typeof characters === "string") parts.push(`text=${quote(characters)}`);
-    pushSection(parts, namedStyleIds(node.text, context) as Record<string, JsonValue>, new Set(["characters"]));
+    pushSection(
+      parts,
+      namedStyleIds(node.text, context) as Record<string, JsonValue>,
+      new Set(["characters"]),
+    );
   }
   pushSection(parts, node.component);
   if (node.bindings) parts.push(`bindings=${scalar(namedBindings(node.bindings, context))}`);
@@ -161,13 +173,17 @@ export function serializeFigm(context: DesignContext): string {
         asset.width !== undefined && asset.height !== undefined
           ? ` size=${asset.width}x${asset.height}`
           : "";
-      lines.push(`  ${quote(asset.id)} ${asset.kind} node=${quote(asset.nodeId)}${size} file=${quote(asset.filename)} status=${asset.status}`);
+      lines.push(
+        `  ${quote(asset.id)} ${asset.kind} node=${quote(asset.nodeId)}${size} file=${quote(asset.filename)} status=${asset.status}`,
+      );
     }
   }
   if (context.warnings.length) {
     lines.push("warnings:");
     for (const warning of context.warnings) {
-      lines.push(`  ${warning.code} ${quote(warning.message)}${warning.nodeId ? ` node=${quote(warning.nodeId)}` : ""}`);
+      lines.push(
+        `  ${warning.code} ${quote(warning.message)}${warning.nodeId ? ` node=${quote(warning.nodeId)}` : ""}`,
+      );
     }
   }
   return lines.join("\n");

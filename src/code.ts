@@ -35,7 +35,9 @@ function sendSelection(): void {
 
 function sendError(error: unknown, requestId?: number): void {
   const message = error instanceof Error ? error.message : "Unexpected plugin error";
-  post(requestId === undefined ? { type: "ERROR", message } : { type: "ERROR", requestId, message });
+  post(
+    requestId === undefined ? { type: "ERROR", message } : { type: "ERROR", requestId, message },
+  );
 }
 
 figma.on("selectionchange", () => {
@@ -65,7 +67,8 @@ figma.ui.onmessage = async (message: UiToPluginMessage) => {
   if (message.type === "GENERATE") {
     try {
       const key = selectionKey(message.options);
-      if (!cache || cache.key !== key) cache = { key, output: await extractSelection(message.options) };
+      if (!cache || cache.key !== key)
+        cache = { key, output: await extractSelection(message.options) };
       post({ type: "RESULT", requestId: message.requestId, output: cache.output });
     } catch (error) {
       sendError(error, message.requestId);
@@ -75,8 +78,11 @@ figma.ui.onmessage = async (message: UiToPluginMessage) => {
 
   if (message.type === "EXPORT_ASSET") {
     try {
-      const knownAsset = cache?.output.context.assets.find((asset) => asset.id === message.asset.id);
-      if (!knownAsset) throw new Error("Generate the selection again before downloading this asset");
+      const knownAsset = cache?.output.context.assets.find(
+        (asset) => asset.id === message.asset.id,
+      );
+      if (!knownAsset)
+        throw new Error("Generate the selection again before downloading this asset");
       const result = await exportAsset(knownAsset);
       post({ type: "ASSET", requestId: message.requestId, ...result });
     } catch (error) {

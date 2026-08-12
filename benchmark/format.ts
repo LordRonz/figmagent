@@ -38,5 +38,6 @@ const savings = fixtures.map((context, index) => {
 });
 
 const median = [...savings].sort((a, b) => a - b)[Math.floor(savings.length / 2)] ?? 0;
-if (median < 0.3) throw new Error(`Median token savings ${(median * 100).toFixed(1)}% is below 30%`);
+if (median < 0.3)
+  throw new Error(`Median token savings ${(median * 100).toFixed(1)}% is below 30%`);
 console.log(`median savings: ${(median * 100).toFixed(1)}%`);

@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createVirtualRoot, sniffImage } from "../src/extract";
 import { countNodes, normalizeValue, sanitizeFilename, stableStringify } from "../src/plain";
 import { serializeFigm, serializeForAi, serializeJson } from "../src/serialize";
-import { createVirtualRoot, sniffImage } from "../src/extract";
 import { fixtureContext } from "./fixture";
 
 test("normalizes colors, floating point values, keys, and special values", () => {
-  assert.deepEqual(normalizeValue({ z: 1.23456, color: { r: 1, g: 0.5, b: 0, a: 0.5 }, a: undefined }), {
-    color: "#FF800080",
-    z: 1.235,
-  });
-  assert.equal(stableStringify({ z: 1, a: { z: 2, a: 3 } }), '{\n  "a": {\n    "a": 3,\n    "z": 2\n  },\n  "z": 1\n}');
+  assert.deepEqual(
+    normalizeValue({ z: 1.23456, color: { r: 1, g: 0.5, b: 0, a: 0.5 }, a: undefined }),
+    {
+      color: "#FF800080",
+      z: 1.235,
+    },
+  );
+  assert.equal(
+    stableStringify({ z: 1, a: { z: 2, a: 3 } }),
+    '{\n  "a": {\n    "a": 3,\n    "z": 2\n  },\n  "z": 1\n}',
+  );
   assert.equal(sanitizeFilename(" Card / Lögö! "), "card-logo");
 });
 
@@ -28,7 +34,7 @@ test("serializes FIGM hierarchy, rich text, bindings, assets, and warnings", () 
   const figm = serializeFigm(context);
   assert.match(figm, /^FIGM\/1 units=px\nsource document="Checkout" page="Mobile"/);
   assert.match(figm, /FRAME "Payment card" id="12:4" size=343x188/);
-  assert.match(figm, /  TEXT "Title \\"primary\\"" id="12:5" size=295x24 position=24,24/);
+  assert.match(figm, / {2}TEXT "Title \\"primary\\"" id="12:5" size=295x24 position=24,24/);
   assert.match(figm, /text="Payment\\nmethod"/);
   assert.match(figm, /bindings=\{"fills":\["\$Text\/Primary"\]\}/);
   assert.match(figm, /RECTANGLE "Hidden alternate"[^\n]+visible=false/);
@@ -62,13 +68,28 @@ test("builds a stable virtual root for multiple selected nodes", () => {
     ],
   );
   assert.deepEqual(virtual.geometry, { x: 100, y: 200, width: 743, height: 238 });
-  assert.deepEqual(virtual.children?.map((node) => [node.geometry.x, node.geometry.y]), [[0, 0], [400, 50]]);
+  assert.deepEqual(
+    virtual.children?.map((node) => [node.geometry.x, node.geometry.y]),
+    [
+      [0, 0],
+      [400, 50],
+    ],
+  );
 });
 
 test("sniffs supported original image formats", () => {
-  assert.deepEqual(sniffImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47])), { mime: "image/png", extension: "png" });
-  assert.deepEqual(sniffImage(new Uint8Array([0xff, 0xd8])), { mime: "image/jpeg", extension: "jpg" });
-  assert.deepEqual(sniffImage(new Uint8Array([0x47, 0x49, 0x46])), { mime: "image/gif", extension: "gif" });
+  assert.deepEqual(sniffImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47])), {
+    mime: "image/png",
+    extension: "png",
+  });
+  assert.deepEqual(sniffImage(new Uint8Array([0xff, 0xd8])), {
+    mime: "image/jpeg",
+    extension: "jpg",
+  });
+  assert.deepEqual(sniffImage(new Uint8Array([0x47, 0x49, 0x46])), {
+    mime: "image/gif",
+    extension: "gif",
+  });
 });
 
 test("plugin UI keeps every scripted control and result target", () => {

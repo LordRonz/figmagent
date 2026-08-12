@@ -1,5 +1,5 @@
-import { context } from "esbuild";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { context } from "esbuild";
 
 const watch = process.argv.includes("--watch");
 

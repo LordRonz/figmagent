@@ -4,7 +4,7 @@ export function fixtureContext(): DesignContext {
   const title: DesignNode = {
     id: "12:5",
     type: "TEXT",
-    name: "Title \"primary\"",
+    name: 'Title "primary"',
     geometry: { height: 24, width: 295, x: 24, y: 24 },
     appearance: { blendMode: "NORMAL", fills: [{ color: "#1E1E1E", type: "SOLID" }], opacity: 1 },
     text: {

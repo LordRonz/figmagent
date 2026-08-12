@@ -25,7 +25,9 @@ const warningsList = element<HTMLUListElement>("warnings");
 const assetsPanel = element<HTMLElement>("assets-panel");
 const assetsList = element<HTMLUListElement>("assets");
 
-type PendingAction = { kind: "ai" | "json" | "preview" } | { kind: "asset"; asset: AssetDescriptor };
+type PendingAction =
+  | { kind: "ai" | "json" | "preview" }
+  | { kind: "asset"; asset: AssetDescriptor };
 let requestId = 0;
 const pending = new Map<number, PendingAction>();
 let hasSelection = false;
@@ -132,7 +134,9 @@ function renderOutput(output: GeneratedOutput): void {
     outputMeta.append(metric);
   }
   preview.textContent =
-    output.figm.length > 4_000 ? `${output.figm.slice(0, 4_000)}\n… preview shortened` : output.figm;
+    output.figm.length > 4_000
+      ? `${output.figm.slice(0, 4_000)}\n… preview shortened`
+      : output.figm;
 
   warningsList.replaceChildren();
   warningsPanel.classList.toggle("hidden", output.context.warnings.length === 0);

@@ -1,7 +1,7 @@
-import { build } from "esbuild";
-import { mkdir, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { mkdir, rm } from "node:fs/promises";
 import { basename } from "node:path";
+import { build } from "esbuild";
 
 const testMode = process.argv[2] === "--test";
 const entry = process.argv[testMode ? 3 : 2];

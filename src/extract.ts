@@ -210,16 +210,24 @@ function collectStyleIds(value: unknown, result = new Set<string>()): Set<string
   return result;
 }
 
-async function resolveVariable(id: string, consumer: SceneNode, state: ExtractionState): Promise<void> {
+async function resolveVariable(
+  id: string,
+  consumer: SceneNode,
+  state: ExtractionState,
+): Promise<void> {
   const existing = state.variableTasks.get(id);
   if (existing) return existing;
   const task = (async () => {
     try {
       const variable = await figma.variables.getVariableByIdAsync(id);
       if (!variable) throw new Error("Variable is unavailable");
-      const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+      const collection = await figma.variables.getVariableCollectionByIdAsync(
+        variable.variableCollectionId,
+      );
       const resolvedModes = actualValue(consumer, "resolvedVariableModes");
-      const modeId = isRecord(resolvedModes) ? resolvedModes[variable.variableCollectionId] : undefined;
+      const modeId = isRecord(resolvedModes)
+        ? resolvedModes[variable.variableCollectionId]
+        : undefined;
       const mode = collection?.modes.find((item) => item.modeId === modeId) ?? collection?.modes[0];
       const definition: VariableDefinition = {
         id,
@@ -243,12 +251,19 @@ async function resolveVariable(id: string, consumer: SceneNode, state: Extractio
         const resolved = normalizeValue(variable.resolveForConsumer(consumer).value);
         if (resolved !== undefined) {
           definition.value = resolved;
-          for (const alias of collectAliases(resolved)) void resolveVariable(alias, consumer, state);
+          for (const alias of collectAliases(resolved))
+            void resolveVariable(alias, consumer, state);
         }
       }
       state.definitions.variables[id] = definition;
     } catch (error) {
-      warn(state, "VARIABLE_UNAVAILABLE", "A bound variable could not be resolved", error, consumer.id);
+      warn(
+        state,
+        "VARIABLE_UNAVAILABLE",
+        "A bound variable could not be resolved",
+        error,
+        consumer.id,
+      );
     }
   })();
   state.variableTasks.set(id, task);
@@ -274,7 +289,10 @@ async function resolveStyle(id: string, nodeId: string, state: ExtractionState):
   return task;
 }
 
-async function resolveComponent(node: InstanceNode, state: ExtractionState): Promise<ComponentNode | null> {
+async function resolveComponent(
+  node: InstanceNode,
+  state: ExtractionState,
+): Promise<ComponentNode | null> {
   try {
     const component = await node.getMainComponentAsync();
     if (!component) throw new Error("Main component is unavailable");
@@ -288,7 +306,10 @@ async function resolveComponent(node: InstanceNode, state: ExtractionState): Pro
           remote: component.remote,
         };
         if (component.description) definition.description = component.description;
-        if (state.options.includeAllVariantsAndModes && component.parent?.type === "COMPONENT_SET") {
+        if (
+          state.options.includeAllVariantsAndModes &&
+          component.parent?.type === "COMPONENT_SET"
+        ) {
           definition.variants = component.parent.children
             .filter((child): child is ComponentNode => child.type === "COMPONENT")
             .map((child) => {
@@ -310,7 +331,13 @@ async function resolveComponent(node: InstanceNode, state: ExtractionState): Pro
     }
     return component;
   } catch (error) {
-    warn(state, "COMPONENT_UNAVAILABLE", "The main component could not be resolved", error, node.id);
+    warn(
+      state,
+      "COMPONENT_UNAVAILABLE",
+      "The main component could not be resolved",
+      error,
+      node.id,
+    );
     return null;
   }
 }
@@ -424,7 +451,13 @@ async function extractPluginMetadata(
       const runs = await styledText(actual);
       if (runs?.length) result.text = { ...(text ?? {}), runs };
     } catch (error) {
-      warn(state, "TEXT_RUNS_UNAVAILABLE", "Styled text ranges could not be read", error, actual.id);
+      warn(
+        state,
+        "TEXT_RUNS_UNAVAILABLE",
+        "Styled text ranges could not be read",
+        error,
+        actual.id,
+      );
     }
   }
 
@@ -451,7 +484,8 @@ async function extractPluginMetadata(
   const reactions = normalizeValue(actualValue(actual, "reactions"));
   const rawInteractions = normalizeValue(raw.interactions);
   const interactionValue = reactions ?? rawInteractions;
-  if (Array.isArray(interactionValue) && interactionValue.length) result.interactions = interactionValue;
+  if (Array.isArray(interactionValue) && interactionValue.length)
+    result.interactions = interactionValue;
 
   const annotations = normalizeValue(actualValue(actual, "annotations"));
   if (Array.isArray(annotations) && annotations.length) result.annotations = annotations;
@@ -463,10 +497,18 @@ async function extractPluginMetadata(
 
   if (root || actual.type === "INSTANCE" || actual.type === "COMPONENT") {
     try {
-      const resources = normalizeValue(await actual.getDevResourcesAsync({ includeChildren: false }));
+      const resources = normalizeValue(
+        await actual.getDevResourcesAsync({ includeChildren: false }),
+      );
       if (Array.isArray(resources) && resources.length) result.devResources = resources;
     } catch (error) {
-      warn(state, "DEV_RESOURCES_UNAVAILABLE", "Developer resources could not be read", error, actual.id);
+      warn(
+        state,
+        "DEV_RESOURCES_UNAVAILABLE",
+        "Developer resources could not be read",
+        error,
+        actual.id,
+      );
     }
   }
 
@@ -508,8 +550,8 @@ async function normalizeNode(
 
   const result: DesignNode = {
     id,
-    type: typeof raw.type === "string" ? raw.type : actual?.type ?? "UNKNOWN",
-    name: typeof raw.name === "string" ? raw.name : actual?.name ?? "Unnamed",
+    type: typeof raw.type === "string" ? raw.type : (actual?.type ?? "UNKNOWN"),
+    name: typeof raw.name === "string" ? raw.name : (actual?.name ?? "Unnamed"),
     geometry,
   };
   if (!visible) result.visible = false;
@@ -551,7 +593,10 @@ function initialState(options: ExportOptions): ExtractionState {
 
 async function settleDefinitionTasks(state: ExtractionState): Promise<void> {
   let taskCount = -1;
-  while (taskCount !== state.variableTasks.size + state.styleTasks.size + state.componentTasks.size) {
+  while (
+    taskCount !==
+    state.variableTasks.size + state.styleTasks.size + state.componentTasks.size
+  ) {
     taskCount = state.variableTasks.size + state.styleTasks.size + state.componentTasks.size;
     await Promise.all([
       ...state.variableTasks.values(),
@@ -566,10 +611,15 @@ function replaceVariableAliases(value: JsonValue, definitions: DefinitionTable):
   if (!isRecord(value)) return value;
   if (value.type === "VARIABLE_ALIAS" && typeof value.id === "string") {
     const variable = definitions.variables[value.id];
-    return variable ? `$${variable.collection ? `${variable.collection}/` : ""}${variable.name}` : `$${value.id}`;
+    return variable
+      ? `$${variable.collection ? `${variable.collection}/` : ""}${variable.name}`
+      : `$${value.id}`;
   }
   return Object.fromEntries(
-    Object.entries(value).map(([key, child]) => [key, replaceVariableAliases(child as JsonValue, definitions)]),
+    Object.entries(value).map(([key, child]) => [
+      key,
+      replaceVariableAliases(child as JsonValue, definitions),
+    ]),
   );
 }
 
@@ -633,14 +683,16 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
 
   await settleDefinitionTasks(state);
   for (const variable of Object.values(state.definitions.variables)) {
-    if (variable.value !== undefined) variable.value = replaceVariableAliases(variable.value, state.definitions);
+    if (variable.value !== undefined)
+      variable.value = replaceVariableAliases(variable.value, state.definitions);
     if (variable.valuesByMode) {
       for (const [mode, value] of Object.entries(variable.valuesByMode)) {
         variable.valuesByMode[mode] = replaceVariableAliases(value, state.definitions);
       }
     }
   }
-  if (!roots.length) throw new Error(state.warnings[0]?.message ?? "No selection could be exported");
+  if (!roots.length)
+    throw new Error(state.warnings[0]?.message ?? "No selection could be exported");
 
   const contextRoots =
     roots.length > 1
@@ -732,6 +784,9 @@ export async function exportAsset(
   }
   const longest = Math.max(node.width, node.height);
   const scale = longest > 4_096 ? 4_096 / longest : 1;
-  const data = await node.exportAsync({ format: "PNG", constraint: { type: "SCALE", value: scale } });
+  const data = await node.exportAsync({
+    format: "PNG",
+    constraint: { type: "SCALE", value: scale },
+  });
   return { filename: descriptor.filename, mime: "image/png", data };
 }
