@@ -1,6 +1,6 @@
 # Figmagent
 
-Figmagent is a local-only Figma plugin that turns the current selection into precise, platform-neutral context for an LLM. It produces a compact `FIGM/1` document, readable JSON, reference screenshots, SVG assets, and original raster images.
+Figmagent is a local-only Figma plugin that turns the current selection into precise, platform-neutral context for an LLM. It produces a compact `FIGM/1` document, readable JSON, reference screenshots, SVG assets, and original raster images. `FIGM` means **Figma Implementation Graph Markup**; see the [FIGM/1 format guide](docs/FIGM-1.md).
 
 It runs in Figma Design, Dev Mode, and Figma for VS Code. It has no backend, telemetry, account, or runtime dependency.
 
@@ -26,7 +26,7 @@ Run `npm run dev` while editing the plugin sandbox. Re-run `npm run build` after
 
 Both text formats come from the same `figmagent.design-context/v1` model. The model captures the selected subtree's implementation-relevant geometry, layout, appearance, rich text, variables, styles, components, interactions, annotations, developer resources, and asset references.
 
-`FIGM/1` is an indentation-based, CSS-like format:
+`FIGM/1`—**Figma Implementation Graph Markup, version 1**—is an indentation-based, CSS-like format:
 
 ```text
 FIGM/1 units=px
