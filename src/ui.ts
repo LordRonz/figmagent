@@ -12,7 +12,9 @@ const copyJson = element<HTMLButtonElement>("copy-json");
 const prepare = element<HTMLButtonElement>("prepare");
 const includeHidden = element<HTMLInputElement>("include-hidden");
 const includeAll = element<HTMLInputElement>("include-all");
-const status = element<HTMLDivElement>("status");
+const status = element<HTMLElement>("status");
+const statusBar = element<HTMLDivElement>("status-bar");
+const selectionCard = element<HTMLElement>("selection-card");
 const selectionName = element<HTMLElement>("selection-name");
 const selectionMeta = element<HTMLElement>("selection-meta");
 const outputPanel = element<HTMLElement>("output-panel");
@@ -46,15 +48,17 @@ function optionsKey(): string {
 }
 
 function setBusy(message: string): void {
-  status.classList.remove("error");
+  statusBar.dataset.tone = "busy";
+  statusBar.setAttribute("aria-busy", "true");
   status.textContent = message;
   copyAi.disabled = true;
   copyJson.disabled = true;
   prepare.disabled = true;
 }
 
-function setReady(message = "Ready"): void {
-  status.classList.remove("error");
+function setReady(message = "Ready", tone: "neutral" | "success" = "neutral"): void {
+  statusBar.dataset.tone = tone;
+  statusBar.removeAttribute("aria-busy");
   status.textContent = message;
   copyAi.disabled = !hasSelection;
   copyJson.disabled = !hasSelection;
@@ -62,7 +66,8 @@ function setReady(message = "Ready"): void {
 }
 
 function setError(message: string): void {
-  status.classList.add("error");
+  statusBar.dataset.tone = "error";
+  statusBar.removeAttribute("aria-busy");
   status.textContent = message;
   copyAi.disabled = !hasSelection;
   copyJson.disabled = !hasSelection;
@@ -102,7 +107,7 @@ async function copyOrGenerate(kind: "ai" | "json"): Promise<void> {
   const text = kind === "ai" ? cachedOutput.ai : cachedOutput.json;
   try {
     await copyText(text);
-    setReady(kind === "ai" ? "Copied FIGM/1 context" : "Copied JSON context");
+    setReady(kind === "ai" ? "Copied FIGM/1 context" : "Copied JSON context", "success");
   } catch (error) {
     setError(error instanceof Error ? error.message : "Copy failed");
   }
@@ -110,7 +115,22 @@ async function copyOrGenerate(kind: "ai" | "json"): Promise<void> {
 
 function renderOutput(output: GeneratedOutput): void {
   outputPanel.classList.remove("hidden");
-  outputMeta.textContent = `${output.nodeCount.toLocaleString()} nodes · ${output.figm.length.toLocaleString()} compact characters · ${output.json.length.toLocaleString()} JSON characters`;
+  outputMeta.replaceChildren();
+  const metrics: Array<readonly [string, string]> = [
+    [output.nodeCount.toLocaleString(), "nodes"],
+    [output.figm.length.toLocaleString(), "FIGM chars"],
+    [output.json.length.toLocaleString(), "JSON chars"],
+  ];
+  for (const [value, label] of metrics) {
+    const metric = document.createElement("div");
+    metric.className = "metric";
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    metric.append(strong, caption);
+    outputMeta.append(metric);
+  }
   preview.textContent =
     output.figm.length > 4_000 ? `${output.figm.slice(0, 4_000)}\n… preview shortened` : output.figm;
 
@@ -118,7 +138,14 @@ function renderOutput(output: GeneratedOutput): void {
   warningsPanel.classList.toggle("hidden", output.context.warnings.length === 0);
   for (const warning of output.context.warnings) {
     const item = document.createElement("li");
-    item.textContent = `${warning.code}: ${warning.message}`;
+    item.className = "warning";
+    const code = document.createElement("span");
+    code.className = "warning-code";
+    code.textContent = warning.code.replace(/_/g, " ");
+    const message = document.createElement("span");
+    message.className = "warning-message";
+    message.textContent = warning.message;
+    item.append(code, message);
     warningsList.append(item);
   }
 
@@ -127,9 +154,18 @@ function renderOutput(output: GeneratedOutput): void {
   for (const asset of output.context.assets) {
     const item = document.createElement("li");
     item.className = "asset";
-    const label = document.createElement("span");
-    label.textContent = `${asset.name} · ${asset.kind}`;
-    label.title = asset.filename;
+    const kind = document.createElement("span");
+    kind.className = "asset-kind";
+    kind.textContent = asset.kind;
+    const copy = document.createElement("div");
+    copy.className = "asset-copy";
+    const name = document.createElement("span");
+    name.className = "asset-name";
+    name.textContent = asset.name;
+    const filename = document.createElement("span");
+    filename.className = "asset-file";
+    filename.textContent = asset.filename;
+    copy.append(name, filename);
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = "Download";
@@ -139,7 +175,7 @@ function renderOutput(output: GeneratedOutput): void {
       setBusy(`Exporting ${asset.name}…`);
       post({ type: "EXPORT_ASSET", requestId: id, asset });
     });
-    item.append(label, button);
+    item.append(kind, copy, button);
     assetsList.append(item);
   }
 }
@@ -177,6 +213,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
   if (message.type === "SELECTION") {
     cachedOutput = undefined;
     hasSelection = message.selection.length > 0;
+    selectionCard.classList.toggle("has-selection", hasSelection);
     if (!hasSelection) {
       selectionName.textContent = "Nothing selected";
       selectionMeta.textContent = "Select a layer, component, or frame in Figma.";
@@ -213,7 +250,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
   if (message.type === "ASSET") {
     pending.delete(message.requestId);
     download(message.filename, message.mime, message.data);
-    setReady(`Downloaded ${message.filename}`);
+    setReady(`Downloaded ${message.filename}`, "success");
     return;
   }
 
@@ -223,11 +260,14 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
   cachedOptionsKey = optionsKey();
   renderOutput(message.output);
   if (!action || action.kind === "preview") {
-    setReady("Assets are ready to download");
+    setReady("Assets are ready to download", "success");
     return;
   }
   if (action.kind === "asset") return;
-  setReady(`Context prepared; click ${action.kind === "ai" ? "Copy for AI" : "Copy JSON"} again to copy`);
+  setReady(
+    `Context prepared; click ${action.kind === "ai" ? "Copy for AI" : "Copy JSON"} again to copy`,
+    "success",
+  );
 };
 
 post({ type: "READY" });

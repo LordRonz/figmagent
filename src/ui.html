@@ -3,119 +3,505 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Figmagent</title>
     <style>
       :root {
         color-scheme: light dark;
-        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
         font-size: 12px;
+        --bg: var(--figma-color-bg, #ffffff);
+        --bg-secondary: var(--figma-color-bg-secondary, #f5f5f5);
+        --bg-tertiary: var(--figma-color-bg-tertiary, #ebebeb);
+        --text: var(--figma-color-text, #1e1e1e);
+        --text-secondary: var(--figma-color-text-secondary, #6e6e6e);
+        --text-tertiary: var(--figma-color-text-tertiary, #9b9b9b);
+        --border: var(--figma-color-border, #dedede);
+        --border-strong: var(--figma-color-border-strong, #c7c7c7);
+        --brand: var(--figma-color-bg-brand, #0d99ff);
+        --brand-hover: var(--figma-color-bg-brand-hover, #007be5);
+        --on-brand: var(--figma-color-text-onbrand, #ffffff);
+        --brand-soft: var(--figma-color-bg-brand-tertiary, #e5f4ff);
+        --success: var(--figma-color-text-success, #198f51);
+        --success-bg: var(--figma-color-bg-success-tertiary, #e7f8ef);
+        --warning: var(--figma-color-text-warning, #9b6500);
+        --warning-bg: var(--figma-color-bg-warning-tertiary, #fff4d6);
+        --danger: var(--figma-color-text-danger, #dc3412);
+        --danger-bg: var(--figma-color-bg-danger-tertiary, #fff0ec);
+        --focus: var(--figma-color-border-brand, #0d99ff);
+        --radius: 12px;
       }
+
       * { box-sizing: border-box; }
+
       body {
+        min-width: 280px;
         margin: 0;
-        color: var(--figma-color-text, #1e1e1e);
-        background: var(--figma-color-bg, #fff);
+        color: var(--text);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
       }
-      main { display: grid; gap: 14px; padding: 16px; }
-      h1, h2, p { margin: 0; }
-      h1 { font-size: 15px; font-weight: 650; }
-      h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--figma-color-text-secondary, #777); }
-      .intro, .muted { color: var(--figma-color-text-secondary, #777); line-height: 1.45; }
-      .selection, .panel {
-        border: 1px solid var(--figma-color-border, #ddd);
+
+      button, input, summary { font: inherit; }
+      button, summary, label { -webkit-tap-highlight-color: transparent; }
+      h1, h2, p, pre { margin: 0; }
+
+      .app-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        min-height: 56px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        display: grid;
+        flex: 0 0 auto;
+        width: 28px;
+        height: 28px;
+        place-items: center;
         border-radius: 8px;
-        padding: 10px;
+        color: var(--on-brand);
+        background: var(--brand);
       }
-      .selection { display: grid; gap: 4px; }
-      .selection strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+      .brand-copy { min-width: 0; }
+      .brand h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+      .brand p { margin-top: 1px; color: var(--text-secondary); font-size: 10px; line-height: 1.3; }
+
+      .content {
+        display: grid;
+        width: 100%;
+        max-width: 680px;
+        margin: 0 auto;
+        gap: 12px;
+        padding: 14px 16px 20px;
+      }
+
+      .selection {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 58px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg-secondary);
+      }
+
+      .selection-icon {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        color: var(--text-secondary);
+        background: var(--bg);
+      }
+
+      .selection-copy { min-width: 0; }
+      .selection strong {
+        display: block;
+        overflow: hidden;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .selection-meta {
+        display: block;
+        overflow: hidden;
+        margin-top: 2px;
+        color: var(--text-secondary);
+        font-size: 10px;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .selection-ready {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-tertiary);
+      }
+
+      .selection.has-selection .selection-icon {
+        border-color: var(--figma-color-border-brand-strong, var(--brand));
+        color: var(--brand);
+        background: var(--brand-soft);
+      }
+      .selection.has-selection .selection-ready { background: var(--success); }
+
+      .actions { display: grid; gap: 8px; }
+      .secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
       button {
-        min-height: 32px;
-        border: 1px solid var(--figma-color-border, #ccc);
-        border-radius: 6px;
+        display: inline-flex;
+        min-width: 0;
+        min-height: 34px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        padding: 7px 11px;
+        color: var(--text);
+        background: var(--bg);
+        font-weight: 550;
+        line-height: 1;
+        cursor: pointer;
+        transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+      }
+
+      button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-secondary); }
+      button:active:not(:disabled) { transform: translateY(1px); }
+      button:disabled { cursor: default; opacity: 0.42; }
+      button svg { flex: 0 0 auto; }
+
+      button.primary {
+        min-height: 40px;
+        border-color: var(--brand);
+        color: var(--on-brand);
+        background: var(--brand);
+        font-weight: 600;
+      }
+      button.primary:hover:not(:disabled) { border-color: var(--brand-hover); background: var(--brand-hover); }
+
+      .button-hint {
+        margin-left: auto;
+        padding: 3px 5px;
+        border-radius: 4px;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.18);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      button:focus-visible, summary:focus-visible, input:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+
+      .status-bar {
+        display: grid;
+        grid-template-columns: 10px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
         padding: 7px 10px;
-        color: var(--figma-color-text, #111);
-        background: var(--figma-color-bg-secondary, #f5f5f5);
-        font: inherit;
+        border-radius: 8px;
+        color: var(--text-secondary);
+        background: var(--bg-secondary);
+        font-size: 10px;
+        line-height: 1.4;
+      }
+
+      .status-indicator {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-tertiary);
+      }
+      .status-bar[data-tone="busy"] .status-indicator {
+        border: 1.5px solid var(--border-strong);
+        border-top-color: var(--brand);
+        background: transparent;
+        animation: spin 700ms linear infinite;
+      }
+      .status-bar[data-tone="success"] { color: var(--success); background: var(--success-bg); }
+      .status-bar[data-tone="success"] .status-indicator { background: var(--success); }
+      .status-bar[data-tone="error"] { color: var(--danger); background: var(--danger-bg); }
+      .status-bar[data-tone="error"] .status-indicator { background: var(--danger); }
+
+      details.settings {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+      }
+
+      summary {
+        display: flex;
+        min-height: 36px;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        list-style: none;
+        color: var(--text-secondary);
         font-weight: 550;
         cursor: pointer;
       }
-      button.primary {
-        border-color: var(--figma-color-bg-brand, #0d99ff);
-        color: var(--figma-color-text-onbrand, white);
-        background: var(--figma-color-bg-brand, #0d99ff);
+      summary::-webkit-details-marker { display: none; }
+      summary:hover { color: var(--text); }
+      summary svg { margin-left: auto; transition: transform 140ms ease; }
+      details[open] summary svg { transform: rotate(180deg); }
+
+      .options {
+        display: grid;
+        gap: 0;
+        padding: 0 10px 7px;
+        border-top: 1px solid var(--border);
       }
-      button:disabled { cursor: default; opacity: .45; }
-      button:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--figma-color-border-brand, #0d99ff); outline-offset: 2px; }
-      details { border-top: 1px solid var(--figma-color-border, #ddd); padding-top: 12px; }
-      summary { cursor: pointer; font-weight: 600; }
-      .options { display: grid; gap: 10px; margin-top: 10px; }
-      label { display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; }
-      label input { margin-top: 2px; }
-      #status { min-height: 18px; color: var(--figma-color-text-secondary, #777); }
-      #status.error { color: var(--figma-color-text-danger, #d13b3b); }
+
+      .option {
+        display: grid;
+        grid-template-columns: 16px minmax(0, 1fr);
+        align-items: start;
+        gap: 9px;
+        padding: 9px 0;
+        color: var(--text);
+        line-height: 1.35;
+        cursor: pointer;
+      }
+      .option + .option { border-top: 1px solid var(--border); }
+      .option span { display: grid; gap: 2px; }
+      .option small { color: var(--text-secondary); font-size: 10px; line-height: 1.35; }
+
+      .option input {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        border: 1px solid var(--border-strong);
+        border-radius: 4px;
+        background: var(--bg);
+        cursor: pointer;
+      }
+      .option input:checked {
+        border-color: var(--brand);
+        background: var(--brand);
+        box-shadow: inset 0 0 0 3px var(--brand), inset 0 0 0 4px var(--on-brand);
+      }
+
+      .panel {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg);
+      }
+
+      .panel-header {
+        display: flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .panel h2 { font-size: 12px; font-weight: 600; }
+      .format-badge, .asset-kind {
+        border-radius: 5px;
+        padding: 3px 5px;
+        color: var(--text-secondary);
+        background: var(--bg-secondary);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-bottom: 1px solid var(--border);
+      }
+      .metric { min-width: 0; padding: 8px 10px; }
+      .metric + .metric { border-left: 1px solid var(--border); }
+      .metric strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+      .metric span { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 10px; }
+
       #preview {
-        max-height: 190px;
+        max-height: 260px;
         overflow: auto;
-        margin: 8px 0 0;
-        padding: 10px;
-        border-radius: 6px;
+        padding: 11px;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
-        color: var(--figma-color-text-secondary, #555);
-        background: var(--figma-color-bg-secondary, #f4f4f4);
-        font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--text-secondary);
+        background: var(--bg-secondary);
+        font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        tab-size: 2;
       }
-      #warnings, #assets { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
-      #warnings li { color: var(--figma-color-text-warning, #8a5a00); line-height: 1.4; }
-      .asset { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
-      .asset span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .asset button { min-height: 28px; padding: 4px 8px; }
+
+      #warnings, #assets {
+        display: grid;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .warning {
+        display: grid;
+        gap: 3px;
+        padding: 9px 10px;
+        color: var(--warning);
+        background: var(--warning-bg);
+        line-height: 1.4;
+      }
+      .warning + .warning { border-top: 1px solid var(--border); }
+      .warning-code { font-size: 10px; font-weight: 650; letter-spacing: 0.03em; }
+      .warning-message { color: var(--text); }
+
+      .asset {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        min-height: 48px;
+        padding: 7px 9px;
+      }
+      .asset + .asset { border-top: 1px solid var(--border); }
+      .asset-copy { min-width: 0; }
+      .asset-name, .asset-file { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .asset-name { font-weight: 550; }
+      .asset-file { margin-top: 2px; color: var(--text-secondary); font-size: 10px; }
+      .asset button { min-height: 28px; padding: 5px 8px; font-size: 10px; }
+
+      #output-panel:not(.hidden) { animation: output-reveal 180ms cubic-bezier(0.16, 1, 0.3, 1); }
       .hidden { display: none; }
-      @media (max-width: 330px) { .actions { grid-template-columns: 1fr; } }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes output-reveal {
+        from { opacity: 0.65; clip-path: inset(0 0 12% 0 round var(--radius)); transform: translateY(4px); }
+        to { opacity: 1; clip-path: inset(0 0 0 0 round var(--radius)); transform: translateY(0); }
+      }
+
+      @media (min-width: 520px) {
+        .content { padding: 18px 20px 24px; gap: 14px; }
+        .actions { grid-template-columns: minmax(200px, 1.35fr) minmax(210px, 1fr); }
+        .secondary-actions { min-width: 0; }
+      }
+
+      @media (max-width: 330px) {
+        .app-header { padding-inline: 12px; }
+        .content { padding-inline: 12px; }
+        .secondary-actions { grid-template-columns: 1fr; }
+        .metrics { grid-template-columns: 1fr; }
+        .metric + .metric { border-top: 1px solid var(--border); border-left: 0; }
+        .asset { grid-template-columns: auto minmax(0, 1fr); }
+        .asset button { grid-column: 1 / -1; width: 100%; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>Figmagent</h1>
-        <p class="intro">Copy precise, platform-neutral design context for an AI implementation.</p>
-      </header>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M3.5 4.5h4v4h-4zM10.5 4.5h4v4h-4zM3.5 11.5h4M10.5 11.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div class="brand-copy">
+          <h1>Figmagent</h1>
+          <p>Design context for AI</p>
+        </div>
+      </div>
+    </header>
 
-      <section class="selection" aria-labelledby="selection-heading">
-        <h2 id="selection-heading">Selection</h2>
-        <strong id="selection-name">Waiting for Figma…</strong>
-        <span id="selection-meta" class="muted"></span>
+    <main class="content">
+      <section id="selection-card" class="selection" aria-labelledby="selection-name">
+        <span class="selection-icon" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+            <path d="M3.5 3.5h11v11h-11zM1.75 6.25v-4.5h4.5M11.75 1.75h4.5v4.5M16.25 11.75v4.5h-4.5M6.25 16.25h-4.5v-4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div class="selection-copy">
+          <strong id="selection-name">Waiting for Figma…</strong>
+          <span id="selection-meta" class="selection-meta"></span>
+        </div>
+        <span class="selection-ready" aria-hidden="true"></span>
       </section>
 
       <section class="actions" aria-label="Export design context">
-        <button id="copy-ai" class="primary" disabled>Copy for AI</button>
-        <button id="copy-json" disabled>Copy JSON</button>
-        <button id="prepare" disabled>Prepare assets</button>
+        <button id="copy-ai" class="primary" disabled>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M5.5 2.5h6a2 2 0 0 1 2 2v6M10.5 5.5h-6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          <span>Copy for AI</span>
+          <span class="button-hint">FIGM/1</span>
+        </button>
+        <div class="secondary-actions">
+          <button id="copy-json" disabled>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M5.25 3.25c-1 0-1.5.5-1.5 1.5v1.5c0 .85-.5 1.25-1.25 1.25.75 0 1.25.4 1.25 1.25v1.5c0 1 .5 1.5 1.5 1.5M10.75 3.25c1 0 1.5.5 1.5 1.5v1.5c0 .85.5 1.25 1.25 1.25-.75 0-1.25.4-1.25 1.25v1.5c0 1-.5 1.5-1.5 1.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+            </svg>
+            <span>Copy JSON</span>
+          </button>
+          <button id="prepare" disabled>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 4.5h10v8H3zM5.25 4.5V3h5.5v1.5M5 8.5l2 2 4-4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Assets</span>
+          </button>
+        </div>
       </section>
 
-      <div id="status" role="status" aria-live="polite"></div>
+      <div id="status-bar" class="status-bar" data-tone="neutral" role="status" aria-live="polite">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span id="status">Connecting to Figma…</span>
+      </div>
 
-      <details>
-        <summary>Advanced options</summary>
+      <details class="settings">
+        <summary>
+          Export options
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </summary>
         <div class="options">
-          <label><input id="include-hidden" type="checkbox" /> Include hidden descendant layers</label>
-          <label><input id="include-all" type="checkbox" /> Include all referenced variants and variable modes</label>
+          <label class="option">
+            <input id="include-hidden" type="checkbox" />
+            <span>Hidden layers<small>Include hidden descendants in the exported tree.</small></span>
+          </label>
+          <label class="option">
+            <input id="include-all" type="checkbox" />
+            <span>All variants and modes<small>Expand referenced components and variable modes.</small></span>
+          </label>
         </div>
       </details>
 
       <section id="output-panel" class="panel hidden" aria-labelledby="output-heading">
-        <h2 id="output-heading">Latest output</h2>
-        <p id="output-meta" class="muted"></p>
-        <pre id="preview"></pre>
+        <header class="panel-header">
+          <h2 id="output-heading">Latest output</h2>
+          <span class="format-badge">FIGM/1</span>
+        </header>
+        <div id="output-meta" class="metrics"></div>
+        <pre id="preview" tabindex="0"></pre>
       </section>
 
       <section id="warnings-panel" class="panel hidden" aria-labelledby="warnings-heading">
-        <h2 id="warnings-heading">Warnings</h2>
+        <header class="panel-header">
+          <h2 id="warnings-heading">Needs attention</h2>
+          <span class="format-badge">Warnings</span>
+        </header>
         <ul id="warnings"></ul>
       </section>
 
       <section id="assets-panel" class="panel hidden" aria-labelledby="assets-heading">
-        <h2 id="assets-heading">Companion assets</h2>
+        <header class="panel-header">
+          <h2 id="assets-heading">Companion assets</h2>
+          <span class="format-badge">On demand</span>
+        </header>
         <ul id="assets"></ul>
       </section>
     </main>

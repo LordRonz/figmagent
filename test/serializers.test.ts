@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { countNodes, normalizeValue, sanitizeFilename, stableStringify } from "../src/plain";
 import { serializeFigm, serializeForAi, serializeJson } from "../src/serialize";
@@ -68,4 +69,30 @@ test("sniffs supported original image formats", () => {
   assert.deepEqual(sniffImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47])), { mime: "image/png", extension: "png" });
   assert.deepEqual(sniffImage(new Uint8Array([0xff, 0xd8])), { mime: "image/jpeg", extension: "jpg" });
   assert.deepEqual(sniffImage(new Uint8Array([0x47, 0x49, 0x46])), { mime: "image/gif", extension: "gif" });
+});
+
+test("plugin UI keeps every scripted control and result target", () => {
+  const html = readFileSync("src/ui.html", "utf8");
+  for (const id of [
+    "copy-ai",
+    "copy-json",
+    "prepare",
+    "include-hidden",
+    "include-all",
+    "status",
+    "status-bar",
+    "selection-card",
+    "selection-name",
+    "selection-meta",
+    "output-panel",
+    "output-meta",
+    "preview",
+    "warnings-panel",
+    "warnings",
+    "assets-panel",
+    "assets",
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
+  }
+  assert.doesNotMatch(html, /https?:\/\//, "the local-only UI must not load remote resources");
 });
