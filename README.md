@@ -15,10 +15,8 @@ Requirements: current Node.js/npm and the current Figma desktop app for local pl
    npm run check
    ```
 
-2. In Figma desktop, open **Plugins → Development → New plugin**, choose a custom-UI Figma Design plugin, and let Figma assign an ID.
-3. Replace `000000000000000000` in `manifest.json` with that assigned numeric ID.
-4. Choose **Plugins → Development → Import plugin from manifest…** and select this repository's `manifest.json`.
-5. Select a layer or frame and run **Figmagent**. The first copy click prepares the selection; click the same button again to copy from an explicit user gesture. **Prepare assets** exposes individual downloads.
+2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select this repository's `manifest.json`.
+3. Select a layer or frame and run **Figmagent**. The first copy click prepares the selection; click the same button again to copy from an explicit user gesture. **Prepare assets** exposes individual downloads.
 
 Run `npm run dev` while editing the plugin sandbox. Re-run `npm run build` after UI changes, then use Figma's development-plugin reload.
 
