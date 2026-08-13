@@ -29,8 +29,8 @@ Both text formats come from the same `figmagent.design-context/v1` model. The mo
 ```text
 FIGM/1 units=px
 source document="Checkout" page="Mobile"
-FRAME "Payment card" id="12:4" size=343x188 layoutMode="VERTICAL" itemSpacing=16 paddingTop=24 fill=#FFFFFF cornerRadius=16
-  TEXT "Title" id="12:5" size=295x24 position=24,24 text="Payment method" bindings={"fills":["$Text/Primary"]}
+FRAME "Payment card" id="12:4" size=343x188 layoutMode="VERTICAL" itemSpacing=16 padding=24 fill=#FFFFFF cornerRadius=16
+  TEXT "Title" id="12:5" size=295x24 position=24,24 text="Payment method" font="Inter"/600/20 lineHeight=24 bindings={"fills":["$Text/Primary"]}
 variables:
   $Text/Primary id="VariableID:color" mode="Light" value=#1E1E1E
 assets:
@@ -41,8 +41,10 @@ Rules:
 
 - Hierarchy is represented by two-space indentation.
 - Strings use JSON escaping; dimensions use pixels; colors use `#RRGGBB` or `#RRGGBBAA`.
-- Properties use their Figma/API names and deterministic ordering.
-- Visual defaults such as opacity `1`, zero rotation, normal blending, and no-wrap are omitted only from `FIGM/1`; JSON retains the canonical model.
+- Properties use deterministic ordering and familiar Figma/CSS terminology.
+- Visual defaults and normalized API bookkeeping are omitted only from `FIGM/1`; JSON retains the canonical model. Equal padding uses `padding=n`, while rich-text `runs` contain only ranges that differ from the common `font` and `lineHeight`.
+- Fixed children are marked `fixed=true`; clipped children are marked `clipped=partial|full`; prototype overflow, Auto Layout sizing, non-default constraints, and absolute positions remain explicit.
+- Instance lines keep resolved component names, variants, and effective properties without repeating REST override bookkeeping already represented by the rendered subtree.
 - Variable aliases are rendered as `$Collection/Variable` and defined once.
 - Companion assets are referenced by stable IDs and downloaded separately to avoid spending LLM tokens on binary or SVG payloads.
 - The output is never silently truncated. Large selections produce warnings.
@@ -61,7 +63,7 @@ npm run format      # Biome formatting
 npm run check       # lint, format check, typecheck, tests, and production build
 ```
 
-The benchmark enforces at least 30% median token savings against pretty JSON and rejects `FIGM/1` if it becomes materially larger than compact JSON. Current representative fixtures cover Auto Layout, absolute geometry, mixed rich text, gradients, effects, variables, instances, variants, hidden content, interactions, escaping, warnings, and assets.
+The benchmark enforces at least 60% median token savings against pretty JSON, rejects `FIGM/1` if it becomes materially larger than compact JSON, and asserts that core implementation signals survive compaction. Current representative fixtures cover Auto Layout, absolute geometry, mixed rich text, gradients, effects, variables, instances, variants, hidden content, interactions, escaping, warnings, and assets.
 
 ## Boundaries
 

@@ -1,4 +1,5 @@
 import type { PluginToUiMessage, UiToPluginMessage } from "./messages";
+import { groupWarnings } from "./plain";
 import type { AssetDescriptor, ExportOptions, GeneratedOutput } from "./types";
 
 const element = <T extends HTMLElement>(id: string): T => {
@@ -140,7 +141,7 @@ function renderOutput(output: GeneratedOutput): void {
 
   warningsList.replaceChildren();
   warningsPanel.classList.toggle("hidden", output.context.warnings.length === 0);
-  for (const warning of output.context.warnings) {
+  for (const warning of groupWarnings(output.context.warnings)) {
     const item = document.createElement("li");
     item.className = "warning";
     const code = document.createElement("span");
@@ -148,7 +149,8 @@ function renderOutput(output: GeneratedOutput): void {
     code.textContent = warning.code.replace(/_/g, " ");
     const message = document.createElement("span");
     message.className = "warning-message";
-    message.textContent = warning.message;
+    message.textContent =
+      warning.count === 1 ? warning.message : `${warning.message} · ${warning.count} occurrences`;
     item.append(code, message);
     warningsList.append(item);
   }

@@ -1,4 +1,11 @@
-import type { JsonObject, JsonValue } from "./types";
+import type { ExportWarning, JsonObject, JsonValue } from "./types";
+
+export interface GroupedWarning {
+  code: string;
+  message: string;
+  count: number;
+  nodeIds: string[];
+}
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -89,4 +96,25 @@ export function countNodes(nodes: Array<{ children?: unknown[] }>): number {
       total + 1 + countNodes((node.children ?? []) as Array<{ children?: unknown[] }>),
     0,
   );
+}
+
+export function groupWarnings(warnings: ExportWarning[]): GroupedWarning[] {
+  const groups = new Map<string, GroupedWarning & { nodes: Set<string> }>();
+  for (const warning of warnings) {
+    const key = `${warning.code}\u0000${warning.message}`;
+    const group = groups.get(key) ?? {
+      code: warning.code,
+      message: warning.message,
+      count: 0,
+      nodeIds: [],
+      nodes: new Set<string>(),
+    };
+    group.count += 1;
+    if (warning.nodeId) group.nodes.add(warning.nodeId);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(({ nodes, ...group }) => ({
+    ...group,
+    nodeIds: [...nodes].sort(),
+  }));
 }

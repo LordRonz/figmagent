@@ -46,12 +46,12 @@ FIGM is therefore not the source of truth inside the plugin. The canonical model
 ```text
 FIGM/1 units=px
 source document="Checkout" page="Mobile"
-FRAME "Payment card" id="12:4" size=343x188 layoutMode="VERTICAL" itemSpacing=16
-  TEXT "Title" id="12:5" size=295x24 text="Payment method" bindings={"fills":["$Text/Primary"]}
+FRAME "Payment card" id="12:4" size=343x188 layoutMode="VERTICAL" itemSpacing=16 padding=24 fill=#FFFFFF cornerRadius=16
+  TEXT "Title" id="12:5" size=295x24 text="Payment method" font="Inter"/600/20 lineHeight=24 bindings={"fills":["$Text/Primary"]}
 variables:
   $Text/Primary id="VariableID:color" mode="Light" value=#1E1E1E
 assets:
-  "card-logo" vector node="12:9" size=40x24 file="card-logo.svg" status=available
+  "card-logo" vector node="12:9" size=40x24 file="card-logo.svg"
 ```
 
 The essential conventions are:
@@ -64,5 +64,22 @@ The essential conventions are:
 - Variable references use `$Collection/Variable` and are defined once.
 - Shared definitions, assets, and warnings follow the node tree as named sections.
 - Visual defaults may be omitted only when their omission is defined and does not change meaning.
+
+## Compact projection
+
+JSON retains every field in the canonical model. FIGM projects that model into the smaller set an implementation agent needs, without changing the underlying extraction:
+
+- Identity transforms, default left/top constraints, null min/max sizes, empty paints/effects, zero spacing/radii, normal/pass-through blending, and other documented API defaults are omitted.
+- Equal padding is written once as `padding=16`; unequal padding is `padding=top,right,bottom,left`.
+- Solid fills and strokes use `fill=#RRGGBBAA` and `stroke=#RRGGBBAA`. Gradients, images, effects, and asymmetric values remain explicit objects or properties.
+- Common text styling is written as `font="Family"/weight/size`, `lineHeight=value`, alignment, resizing, and other non-default text properties. Rich-text boundaries use `runs=[{"range":"start:end",…}]` and contain only differences from the common style.
+- Instances use the resolved component name plus compact `variants` and non-variant `properties`. The rendered subtree is authoritative, so REST override bookkeeping and duplicate component-property objects are omitted.
+- `numberOfFixedChildren` remains on the parent and each affected topmost child is marked `fixed=true`. Figma [orders children back-to-front](https://developers.figma.com/docs/plugins/api/properties/nodes-children/) and [keeps fixed children above scrolling children](https://developers.figma.com/docs/plugins/api/properties/nodes-numberoffixedchildren/), so this removes ambiguity without inventing state.
+- A direct child extending beyond a clipping parent is marked `clipped=partial`; a fully obscured child is `clipped=full`. Its complete subtree remains available as supporting implementation context.
+- A retained vector asset replaces its descendant path subtree in FIGM, and nested vector assets already covered by that ancestor are omitted from the FIGM asset table. JSON retains the complete node tree and every descriptor from canonical extraction.
+- Repeated warnings with the same code and message are consolidated and list their affected node IDs once.
+- `status=available` is implicit for assets; unavailable assets remain explicit.
+
+The serializer deliberately retains exact node sizes and relative positions, Auto Layout sizing and gaps, non-default constraints, clipping and scrolling, typography, resolved colors, variables/styles, component states, interactions, and companion-asset references. These are the fields required to reconstruct the visible design rather than merely recognize it.
 
 The executable definition of the current serializer lives in [`src/serialize.ts`](../src/serialize.ts), with behavior locked by [`test/serializers.test.ts`](../test/serializers.test.ts) and the token benchmark in [`benchmark/format.ts`](../benchmark/format.ts).

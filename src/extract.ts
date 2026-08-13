@@ -63,6 +63,7 @@ const LAYOUT_KEYS = [
   "layoutGrids",
   "overflowDirection",
   "numberOfFixedChildren",
+  "scrollBehavior",
 ] as const;
 
 const APPEARANCE_KEYS = [
