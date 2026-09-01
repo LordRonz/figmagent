@@ -16,7 +16,7 @@ Requirements: current Node.js/npm and the current Figma desktop app for local pl
    ```
 
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select this repository's `manifest.json`.
-3. Select a layer or frame and run **Figmagent**. The first copy click prepares the selection; click the same button again to copy from an explicit user gesture. **Prepare assets** exposes individual downloads.
+3. Select a layer or frame and run **Figmagent**. **Copy for AI** or **Copy JSON** prepares the selection and copies the result when it is ready. **Prepare assets** exposes individual downloads.
 
 Run `npm run dev` while editing the plugin sandbox. Re-run `npm run build` after UI changes, then use Figma's development-plugin reload.
 

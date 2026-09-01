@@ -107,9 +107,12 @@ async function copyOrGenerate(kind: "ai" | "json"): Promise<void> {
     requestGenerate(kind);
     return;
   }
-  const text = kind === "ai" ? cachedOutput.ai : cachedOutput.json;
+  await copyOutput(kind, cachedOutput);
+}
+
+async function copyOutput(kind: "ai" | "json", output: GeneratedOutput): Promise<void> {
   try {
-    await copyText(text);
+    await copyText(kind === "ai" ? output.ai : output.json);
     setReady(kind === "ai" ? "Copied FIGM/1 context" : "Copied JSON context", "success");
   } catch (error) {
     setError(error instanceof Error ? error.message : "Copy failed");
@@ -270,10 +273,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
     return;
   }
   if (action.kind === "asset") return;
-  setReady(
-    `Context prepared; click ${action.kind === "ai" ? "Copy for AI" : "Copy JSON"} again to copy`,
-    "success",
-  );
+  await copyOutput(action.kind, message.output);
 };
 
 post({ type: "READY" });

@@ -366,3 +366,13 @@ test("plugin UI keeps every scripted control and result target", () => {
   }
   assert.doesNotMatch(html, /https?:\/\//, "the local-only UI must not load remote resources");
 });
+
+test("copy actions copy generated output when processing finishes", () => {
+  const ui = readFileSync("src/ui.ts", "utf8");
+  assert.match(ui, /await copyText\(kind === "ai" \? output\.ai : output\.json\)/);
+  const start = ui.indexOf("const action = pending.get(message.requestId);");
+  assert.notEqual(start, -1);
+  const resultHandler = ui.slice(start);
+  assert.match(resultHandler, /await copyOutput\(action\.kind, message\.output\)/);
+  assert.doesNotMatch(resultHandler, /click .* again to copy/);
+});
