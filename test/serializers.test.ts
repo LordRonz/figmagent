@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { assignAssetFilenames, retainedAssetIds, retainedAssets } from "../src/assets";
+import { compareContexts, serializeDelta } from "../src/delta";
 import { createVirtualRoot, sniffImage } from "../src/extract";
 import {
   countNodes,
@@ -11,6 +13,7 @@ import {
 } from "../src/plain";
 import { serializeFigm, serializeForAi, serializeJson } from "../src/serialize";
 import type { DesignNode } from "../src/types";
+import { createZip } from "../src/zip";
 import { fixtureContext } from "./fixture";
 
 test("normalizes colors, floating point values, keys, and special values", () => {
@@ -45,7 +48,7 @@ test("serializes FIGM hierarchy, rich text, bindings, assets, and warnings", () 
   assert.match(figm, /text="Payment\\nmethod"/);
   assert.match(figm, /bindings=\{"fills":\["\$Text\/Primary"\]\}/);
   assert.match(figm, /RECTANGLE "Hidden alternate"[^\n]+visible=false/);
-  assert.match(figm, /"vector:12:9" vector node="12:9" size=40x24 file="card-logo.svg"/);
+  assert.match(figm, /"vector:12:9" vector node="12:9" size=40x24 file="assets\/card-logo.svg"/);
   assert.match(figm, /REMOTE_REFERENCE "A remote definition was unavailable" node="12:4"/);
   assert.doesNotMatch(figm, /opacity=1/);
   assert.doesNotMatch(figm, /blendMode="NORMAL"/);
@@ -341,16 +344,139 @@ test("sniffs supported original image formats", () => {
   });
 });
 
+test("retains only FIGM assets and assigns safe collision-free names", () => {
+  const context = fixtureContext();
+  const root = context.roots[0];
+  assert.ok(root);
+  root.assetRefs = ["vector:12:9", "vector:extra", "image:photo"];
+  context.assets.push(
+    {
+      id: "vector:extra",
+      kind: "vector",
+      nodeId: "12:9",
+      name: "Card / logo",
+      filename: "unsafe.svg",
+      status: "available",
+    },
+    {
+      id: "image:photo",
+      kind: "raster",
+      nodeId: "12:4",
+      name: "Card / logo",
+      filename: "old.image",
+      status: "available",
+      imageHash: "hash",
+    },
+    {
+      id: "vector:unused",
+      kind: "vector",
+      nodeId: "12:10",
+      name: "Card / logo",
+      filename: "unused.svg",
+      status: "available",
+    },
+  );
+  assert.equal(retainedAssetIds(context).has("vector:unused"), false);
+  assignAssetFilenames(context, new Map([["image:photo", "jpg"]]));
+  const names = retainedAssets(context).map((asset) => asset.filename);
+  assert.equal(new Set(names.map((name) => name.toLowerCase())).size, names.length);
+  assert.ok(names.includes("card-logo-2.svg"));
+  assert.ok(names.includes("card-logo.jpg"));
+});
+
+test("compares canonical snapshots, including replacements, moves, definitions, and rendered assets", () => {
+  const baseline = fixtureContext();
+  const unchanged = structuredClone(baseline);
+  assert.equal(compareContexts(baseline, unchanged).changed, false);
+
+  const current = structuredClone(baseline);
+  const root = current.roots[0];
+  assert.ok(root?.children);
+  const title = root.children[0];
+  const icon = root.children[1];
+  assert.ok(title && icon);
+  root.children = [icon, title, ...root.children.slice(2)];
+  if (root.appearance) delete root.appearance.cornerRadius;
+  title.text = { ...title.text, characters: "Updated payment" };
+  root.children.push({
+    id: "12:30",
+    type: "RECTANGLE",
+    name: "New row",
+    geometry: { x: 0, y: 160, width: 100, height: 20 },
+  });
+  const variable = current.definitions.variables["VariableID:color"];
+  assert.ok(variable);
+  variable.value = "#FFFFFF";
+
+  const delta = compareContexts(baseline, current);
+  assert.equal(delta.changed, true);
+  assert.ok(delta.changes.added.some((item) => item.id === "12:30"));
+  assert.ok(delta.changes.moved.some((item) => item.id === "12:5"));
+  const updatedRoot = delta.changes.updated.find((item) => item.id === "12:4");
+  assert.ok(updatedRoot);
+  assert.equal(updatedRoot.replace, true);
+  assert.equal("cornerRadius" in updatedRoot.node, false);
+  assert.match(serializeDelta(delta), /^FIGM\/DELTA\/1\n/);
+  assert.match(serializeDelta(delta), /"definitions"/);
+});
+
+test("marks rendered vector and screenshot changes as companion-asset changes", () => {
+  const baseline = fixtureContext();
+  const current = structuredClone(baseline);
+  const root = current.roots[0];
+  assert.ok(root?.children);
+  const title = root.children[0];
+  const icon = root.children[1];
+  assert.ok(title && icon);
+  icon.geometry.width = 48;
+  title.text = { ...title.text, characters: "Changed" };
+  const delta = compareContexts(baseline, current);
+  assert.ok(delta.assetChanges.includes("screenshot:12:4"));
+  assert.ok(delta.assetChanges.includes("vector:12:9"));
+});
+
+test("creates a readable ZIP without JSON and rejects unsafe or duplicate entries", () => {
+  const archive = createZip([
+    { name: "design.figm", data: "FIGM/1" },
+    { name: "assets/logo.svg", data: "<svg />" },
+  ]);
+  const read16 = (offset: number): number =>
+    (archive[offset] ?? 0) | ((archive[offset + 1] ?? 0) << 8);
+  const read32 = (offset: number): number => read16(offset) | (read16(offset + 2) << 16);
+  const names: string[] = [];
+  for (let offset = 0; read32(offset) === 0x04034b50; ) {
+    const nameLength = read16(offset + 26);
+    const extraLength = read16(offset + 28);
+    const size = read32(offset + 18) >>> 0;
+    names.push(new TextDecoder().decode(archive.slice(offset + 30, offset + 30 + nameLength)));
+    offset += 30 + nameLength + extraLength + size;
+  }
+  assert.deepEqual(names, ["design.figm", "assets/logo.svg"]);
+  assert.doesNotMatch(names.join("\n"), /\.json/);
+  assert.throws(() => createZip([{ name: "../secret", data: "no" }]));
+  assert.throws(() =>
+    createZip([
+      { name: "same", data: "1" },
+      { name: "same", data: "2" },
+    ]),
+  );
+});
+
 test("plugin UI keeps every scripted control and result target", () => {
   const html = readFileSync("src/ui.html", "utf8");
   for (const id of [
     "copy-ai",
     "copy-json",
+    "copy-changes",
+    "download-handoff",
     "prepare",
     "include-hidden",
     "include-all",
     "status",
     "status-bar",
+    "baseline-status",
+    "companion-notice",
+    "download-from-notice",
     "selection-card",
     "selection-name",
     "selection-meta",
@@ -370,9 +496,9 @@ test("plugin UI keeps every scripted control and result target", () => {
 test("copy actions copy generated output when processing finishes", () => {
   const ui = readFileSync("src/ui.ts", "utf8");
   assert.match(ui, /await copyText\(kind === "ai" \? output\.ai : output\.json\)/);
-  const start = ui.indexOf("const action = pending.get(message.requestId);");
+  const start = ui.lastIndexOf('if (message.type === "RESULT")');
   assert.notEqual(start, -1);
   const resultHandler = ui.slice(start);
-  assert.match(resultHandler, /await copyOutput\(action\.kind, message\.output\)/);
+  assert.match(resultHandler, /await copyOutput\(\s*action\.kind,\s*message\.output,/);
   assert.doesNotMatch(resultHandler, /click .* again to copy/);
 });

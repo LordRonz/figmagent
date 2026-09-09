@@ -16,7 +16,7 @@ Requirements: current Node.js/npm and the current Figma desktop app for local pl
    ```
 
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select this repository's `manifest.json`.
-3. Select a layer or frame and run **Figmagent**. **Copy for AI** or **Copy JSON** prepares the selection and copies the result when it is ready. **Prepare assets** exposes individual downloads.
+3. Select a layer or frame and run **Figmagent**. **Copy for AI** or **Copy JSON** prepares the selection and copies the result when it is ready. **Download handoff** creates a FIGM-and-assets ZIP; **Assets** exposes individual downloads.
 
 Run `npm run dev` while editing the plugin sandbox. Re-run `npm run build` after UI changes, then use Figma's development-plugin reload.
 
@@ -34,7 +34,7 @@ FRAME "Payment card" id="12:4" size=343x188 layoutMode="VERTICAL" itemSpacing=16
 variables:
   $Text/Primary id="VariableID:color" mode="Light" value=#1E1E1E
 assets:
-  "card-logo" vector node="12:9" size=40x24 file="card-logo.svg"
+  "card-logo" vector node="12:9" size=40x24 file="assets/card-logo.svg"
 ```
 
 Rules:
@@ -47,7 +47,14 @@ Rules:
 - Instance lines keep resolved component names, variants, and effective properties without repeating REST override bookkeeping already represented by the rendered subtree.
 - Variable aliases are rendered as `$Collection/Variable` and defined once.
 - Companion assets are referenced by stable IDs and downloaded separately to avoid spending LLM tokens on binary or SVG payloads.
+- A handoff ZIP contains `design.figm` and only the retained companion files under `assets/`; it never contains the JSON representation.
 - The output is never silently truncated. Large selections produce warnings.
+
+## Handoff and changes
+
+Use **Download handoff** when the receiving agent needs the FIGM file and its screenshots, vectors, or original raster files. The ZIP is created locally after every required asset exports successfully. Extraction warnings remain in `design.figm`; a failed asset export leaves no partial download and can be retried.
+
+After a successful **Copy for AI** or **Download handoff**, **Copy changes** compares the current canonical selection with that one in-memory baseline. It reports additions, removals, property replacements, moves, child reordering, and complete current definition tables. The baseline is scoped to the page, selected roots, and export options; changing any of those requires a new full handoff. See the [FIGM delta format](docs/FIGM-delta.md) for replacement semantics and asset-change handling.
 
 By default, hidden descendants and unused variants/modes are excluded. Advanced options can include hidden layers plus the complete variant and mode matrix for referenced components and variables. The plugin never scans or loads the full document.
 
@@ -70,6 +77,6 @@ The benchmark enforces at least 60% median token savings against pretty JSON, re
 - Complex vectors and raster pixels are companion assets, not inline prompt content.
 - Remote variables/components are included when Figma exposes the referenced definition; inaccessible definitions are reported as warnings.
 - The plugin describes design intent and current rendered state. It does not reproduce Figma's private `.fig` storage format or generate framework-specific code.
-- FigJam, Slides, Buzz, cloud sync, ZIP packaging, and direct LLM API calls are intentionally out of scope.
+- FigJam, Slides, Buzz, cloud sync, and direct LLM API calls are intentionally out of scope.
 
 The implementation follows Figma's current [Plugin API](https://developers.figma.com/docs/plugins/), [dynamic page loading](https://developers.figma.com/docs/plugins/migrating-to-dynamic-loading/), and [Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode/) requirements.

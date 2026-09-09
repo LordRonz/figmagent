@@ -1,4 +1,10 @@
-import { exportAsset, extractSelection } from "./extract";
+import { retainedAssets } from "./assets";
+import {
+  exportAsset,
+  extractSelection,
+  prepareAssetFilenames,
+  prepareHandoffAssets,
+} from "./extract";
 import type { PluginToUiMessage, UiToPluginMessage } from "./messages";
 import type { ExportOptions, GeneratedOutput } from "./types";
 
@@ -11,7 +17,20 @@ figma.showUI(__html__, {
   themeColors: true,
 });
 
-let cache: { key: string; output: GeneratedOutput } | undefined;
+interface CachedOutput {
+  key: string;
+  revision: number;
+  output: GeneratedOutput;
+}
+
+class StaleRequest extends Error {
+  constructor() {
+    super("The selection or design changed while the export was running");
+  }
+}
+
+let cache: CachedOutput | undefined;
+let revision = 0;
 
 function post(message: PluginToUiMessage): void {
   figma.ui.postMessage(message);
@@ -19,12 +38,19 @@ function post(message: PluginToUiMessage): void {
 
 function selectionKey(options: ExportOptions): string {
   const ids = figma.currentPage.selection.map((node) => node.id).sort();
-  return JSON.stringify([ids, options.includeHidden, options.includeAllVariantsAndModes]);
+  return JSON.stringify([
+    figma.currentPage.id,
+    ids,
+    options.includeHidden,
+    options.includeAllVariantsAndModes,
+  ]);
 }
 
 function sendSelection(): void {
   post({
     type: "SELECTION",
+    pageId: figma.currentPage.id,
+    revision,
     selection: figma.currentPage.selection.map((node) => ({
       id: node.id,
       name: node.name,
@@ -40,22 +66,49 @@ function sendError(error: unknown, requestId?: number): void {
   );
 }
 
-figma.on("selectionchange", () => {
+function sendStale(requestId: number): void {
+  post({ type: "STALE", requestId, revision });
+}
+
+function isCurrent(requestRevision: number, scopeKey: string, options: ExportOptions): boolean {
+  return requestRevision === revision && scopeKey === selectionKey(options);
+}
+
+async function generatedOutput(
+  options: ExportOptions,
+  requestRevision: number,
+  scopeKey: string,
+): Promise<GeneratedOutput> {
+  if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
+  if (cache?.key === scopeKey && cache.revision === requestRevision) return cache.output;
+  const output = await extractSelection(options);
+  if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
+  await prepareAssetFilenames(output);
+  if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
+  cache = { key: scopeKey, revision: requestRevision, output };
+  return output;
+}
+
+function invalidate(): void {
+  revision += 1;
   cache = undefined;
+  post({ type: "STALE", revision });
+}
+
+figma.on("selectionchange", () => {
+  invalidate();
   sendSelection();
 });
 
 let watchedPage = figma.currentPage;
-const invalidateForDocumentChange = () => {
-  if (!cache) return;
-  cache = undefined;
-  post({ type: "STALE" });
-};
+const invalidateForDocumentChange = () => invalidate();
 watchedPage.on("nodechange", invalidateForDocumentChange);
 figma.on("currentpagechange", () => {
   watchedPage.off("nodechange", invalidateForDocumentChange);
   watchedPage = figma.currentPage;
   watchedPage.on("nodechange", invalidateForDocumentChange);
+  invalidate();
+  sendSelection();
 });
 
 figma.ui.onmessage = async (message: UiToPluginMessage) => {
@@ -66,27 +119,112 @@ figma.ui.onmessage = async (message: UiToPluginMessage) => {
 
   if (message.type === "GENERATE") {
     try {
-      const key = selectionKey(message.options);
-      if (!cache || cache.key !== key)
-        cache = { key, output: await extractSelection(message.options) };
-      post({ type: "RESULT", requestId: message.requestId, output: cache.output });
+      const output = await generatedOutput(message.options, message.revision, message.scopeKey);
+      if (!isCurrent(message.revision, message.scopeKey, message.options)) throw new StaleRequest();
+      post({
+        type: "RESULT",
+        requestId: message.requestId,
+        revision: message.revision,
+        scopeKey: message.scopeKey,
+        output,
+      });
     } catch (error) {
-      sendError(error, message.requestId);
+      if (
+        error instanceof StaleRequest ||
+        !isCurrent(message.revision, message.scopeKey, message.options)
+      )
+        sendStale(message.requestId);
+      else sendError(error, message.requestId);
+    }
+    return;
+  }
+
+  if (message.type === "DOWNLOAD_HANDOFF") {
+    try {
+      const output = await generatedOutput(message.options, message.revision, message.scopeKey);
+      if (!isCurrent(message.revision, message.scopeKey, message.options)) throw new StaleRequest();
+      const total = retainedAssets(output.context).length;
+      post({
+        type: "BUNDLE_PROGRESS",
+        requestId: message.requestId,
+        revision: message.revision,
+        scopeKey: message.scopeKey,
+        phase: "assets",
+        completed: 0,
+        total,
+      });
+      const assets = await prepareHandoffAssets(output, (progress) => {
+        if (!isCurrent(message.revision, message.scopeKey, message.options))
+          throw new StaleRequest();
+        post({
+          type: "BUNDLE_PROGRESS",
+          requestId: message.requestId,
+          revision: message.revision,
+          scopeKey: message.scopeKey,
+          phase: "assets",
+          completed: progress.completed,
+          total: progress.total,
+        });
+      });
+      if (!isCurrent(message.revision, message.scopeKey, message.options)) throw new StaleRequest();
+      cache = { key: message.scopeKey, revision: message.revision, output };
+      for (const asset of assets) {
+        if (!isCurrent(message.revision, message.scopeKey, message.options))
+          throw new StaleRequest();
+        post({
+          type: "BUNDLE_ASSET",
+          requestId: message.requestId,
+          revision: message.revision,
+          scopeKey: message.scopeKey,
+          assetId: asset.id,
+          filename: asset.filename,
+          mime: asset.mime,
+          data: asset.data,
+        });
+      }
+      post({
+        type: "BUNDLE_RESULT",
+        requestId: message.requestId,
+        revision: message.revision,
+        scopeKey: message.scopeKey,
+        output,
+      });
+    } catch (error) {
+      if (
+        error instanceof StaleRequest ||
+        !isCurrent(message.revision, message.scopeKey, message.options)
+      )
+        sendStale(message.requestId);
+      else sendError(error, message.requestId);
     }
     return;
   }
 
   if (message.type === "EXPORT_ASSET") {
     try {
-      const knownAsset = cache?.output.context.assets.find(
-        (asset) => asset.id === message.asset.id,
-      );
+      if (!cache || cache.revision !== message.revision || cache.key !== message.scopeKey)
+        throw new Error("Generate the selection again before downloading this asset");
+      const knownAsset = cache.output.context.assets.find((asset) => asset.id === message.asset.id);
       if (!knownAsset)
         throw new Error("Generate the selection again before downloading this asset");
       const result = await exportAsset(knownAsset);
-      post({ type: "ASSET", requestId: message.requestId, ...result });
+      if (!cache || cache.revision !== message.revision || cache.key !== message.scopeKey) {
+        sendStale(message.requestId);
+        return;
+      }
+      post({
+        type: "ASSET",
+        requestId: message.requestId,
+        revision: message.revision,
+        scopeKey: message.scopeKey,
+        filename: result.filename,
+        mime: result.mime,
+        data: result.data,
+      });
     } catch (error) {
-      sendError(error, message.requestId);
+      if (!cache || cache.revision !== message.revision || cache.key !== message.scopeKey)
+        sendStale(message.requestId);
+      else sendError(error, message.requestId);
     }
   }
 };

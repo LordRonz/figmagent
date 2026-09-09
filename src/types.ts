@@ -25,6 +25,13 @@ export interface AssetDescriptor {
   imageHash?: string;
 }
 
+export interface PreparedAsset {
+  id: string;
+  filename: string;
+  mime: string;
+  data: Uint8Array | string;
+}
+
 export interface VariableDefinition {
   id: string;
   name: string;

@@ -1,3 +1,4 @@
+import { assetPath, assignAssetFilenames, retainedAssets } from "./assets";
 import { countNodes, isRecord, normalizeObject, normalizeValue, sanitizeFilename } from "./plain";
 import { serializeFigm, serializeForAi, serializeJson } from "./serialize";
 import type {
@@ -11,6 +12,7 @@ import type {
   GeneratedOutput,
   JsonObject,
   JsonValue,
+  PreparedAsset,
   StyleDefinition,
   VariableDefinition,
 } from "./types";
@@ -759,6 +761,78 @@ export function sniffImage(bytes: Uint8Array): { mime: string; extension: string
   return { mime: "application/octet-stream", extension: "bin" };
 }
 
+function refreshOutput(output: GeneratedOutput): void {
+  output.figm = serializeFigm(output.context);
+  output.ai = serializeForAi(output.context);
+  output.json = serializeJson(output.context);
+}
+
+function filenameExtension(filename: string): string | undefined {
+  return /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase();
+}
+
+export async function prepareAssetFilenames(output: GeneratedOutput): Promise<void> {
+  const extensions = new Map<string, string>();
+  for (const asset of retainedAssets(output.context).filter((item) => item.kind === "raster")) {
+    try {
+      const exported = await exportAsset(asset);
+      asset.status = "available";
+      const extension = filenameExtension(exported.filename);
+      if (extension) extensions.set(asset.id, extension);
+    } catch (error) {
+      asset.status = "unavailable";
+      output.context.warnings.push({
+        code: "ASSET_UNAVAILABLE",
+        message: error instanceof Error ? error.message : "A raster asset could not be read",
+        nodeId: asset.nodeId,
+      });
+    }
+  }
+  assignAssetFilenames(output.context, extensions);
+  refreshOutput(output);
+}
+
+export interface AssetExportProgress {
+  completed: number;
+  total: number;
+  asset: AssetDescriptor;
+}
+
+export async function prepareHandoffAssets(
+  output: GeneratedOutput,
+  onProgress?: (progress: AssetExportProgress) => void,
+): Promise<PreparedAsset[]> {
+  const required = retainedAssets(output.context);
+  const extensions = new Map<string, string>();
+  const exported: PreparedAsset[] = [];
+  for (const [index, asset] of required.entries()) {
+    let result: Awaited<ReturnType<typeof exportAsset>>;
+    try {
+      result = await exportAsset(asset);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The asset could not be exported";
+      throw new Error(`Required asset "${asset.name}" failed: ${detail}`);
+    }
+    asset.status = "available";
+    const extension = filenameExtension(result.filename);
+    if (extension) extensions.set(asset.id, extension);
+    exported.push({
+      id: asset.id,
+      filename: asset.filename,
+      mime: result.mime,
+      data: result.data,
+    });
+    onProgress?.({ completed: index + 1, total: required.length, asset });
+  }
+  assignAssetFilenames(output.context, extensions);
+  refreshOutput(output);
+  return exported.map(({ id, mime, data }) => {
+    const asset = output.context.assets.find((item) => item.id === id);
+    if (!asset) throw new Error(`Prepared asset ${id} disappeared from the handoff`);
+    return { id, filename: assetPath(asset), mime, data };
+  });
+}
+
 export async function exportAsset(
   descriptor: AssetDescriptor,
 ): Promise<{ filename: string; mime: string; data: Uint8Array | string }> {
@@ -769,7 +843,9 @@ export async function exportAsset(
     const data = await image.getBytesAsync();
     const detected = sniffImage(data);
     return {
-      filename: `${sanitizeFilename(descriptor.name)}.${detected.extension}`,
+      filename: descriptor.filename.endsWith(`.${detected.extension}`)
+        ? descriptor.filename
+        : `${sanitizeFilename(descriptor.name)}.${detected.extension}`,
       mime: detected.mime,
       data,
     };

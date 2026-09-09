@@ -51,7 +51,7 @@ FRAME "Payment card" id="12:4" size=343x188 layoutMode="VERTICAL" itemSpacing=16
 variables:
   $Text/Primary id="VariableID:color" mode="Light" value=#1E1E1E
 assets:
-  "card-logo" vector node="12:9" size=40x24 file="card-logo.svg"
+  "card-logo" vector node="12:9" size=40x24 file="assets/card-logo.svg"
 ```
 
 The essential conventions are:

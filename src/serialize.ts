@@ -1,3 +1,4 @@
+import { assetPath, retainedAssetIds } from "./assets";
 import { groupWarnings, isRecord, stableStringify } from "./plain";
 import type { DesignContext, DesignNode, JsonObject, JsonValue } from "./types";
 
@@ -560,23 +561,6 @@ function nodeLine(
   return lines;
 }
 
-function retainedAssetIds(context: DesignContext): Set<string> {
-  const kinds = new Map(context.assets.map((asset) => [asset.id, asset.kind]));
-  const retained = new Set(
-    context.assets.filter((asset) => asset.kind === "screenshot").map((asset) => asset.id),
-  );
-  const visit = (node: DesignNode, vectorAncestor: boolean): void => {
-    const refs = node.assetRefs ?? [];
-    const hasVector = refs.some((id) => kinds.get(id) === "vector");
-    for (const id of refs) {
-      if (kinds.get(id) !== "vector" || !vectorAncestor) retained.add(id);
-    }
-    for (const child of node.children ?? []) visit(child, vectorAncestor || hasVector);
-  };
-  for (const root of context.roots) visit(root, false);
-  return retained;
-}
-
 function definitionLines(context: DesignContext): string[] {
   const lines: string[] = [];
   const variables = Object.values(context.definitions.variables);
@@ -645,7 +629,7 @@ export function serializeFigm(context: DesignContext): string {
           : "";
       const status = asset.status === "available" ? "" : ` status=${asset.status}`;
       lines.push(
-        `  ${quote(asset.id)} ${asset.kind} node=${quote(asset.nodeId)}${size} file=${quote(asset.filename)}${status}`,
+        `  ${quote(asset.id)} ${asset.kind} node=${quote(asset.nodeId)}${size} file=${quote(assetPath(asset))}${status}`,
       );
     }
   }
