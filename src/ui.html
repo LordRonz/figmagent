@@ -199,9 +199,7 @@
 
       .status-bar {
         display: grid;
-        grid-template-columns: 10px minmax(0, 1fr);
         align-items: center;
-        gap: 8px;
         min-height: 30px;
         padding: 7px 10px;
         border-radius: 8px;
@@ -211,22 +209,8 @@
         line-height: 1.4;
       }
 
-      .status-indicator {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--text-tertiary);
-      }
-      .status-bar[data-tone="busy"] .status-indicator {
-        border: 1.5px solid var(--border-strong);
-        border-top-color: var(--brand);
-        background: transparent;
-        animation: spin 700ms linear infinite;
-      }
       .status-bar[data-tone="success"] { color: var(--success); background: var(--success-bg); }
-      .status-bar[data-tone="success"] .status-indicator { background: var(--success); }
       .status-bar[data-tone="error"] { color: var(--danger); background: var(--danger-bg); }
-      .status-bar[data-tone="error"] .status-indicator { background: var(--danger); }
 
       details.settings {
         border: 1px solid var(--border);
@@ -387,7 +371,6 @@
       #output-panel:not(.hidden) { animation: output-reveal 180ms cubic-bezier(0.16, 1, 0.3, 1); }
       .hidden { display: none; }
 
-      @keyframes spin { to { transform: rotate(360deg); } }
       @keyframes output-reveal {
         from { opacity: 0.65; clip-path: inset(0 0 12% 0 round var(--radius)); transform: translateY(4px); }
         to { opacity: 1; clip-path: inset(0 0 0 0 round var(--radius)); transform: translateY(0); }
@@ -411,7 +394,7 @@
 
       @media (prefers-reduced-motion: reduce) {
         button, summary svg { transition-duration: 0.01ms; }
-        .spinner, #output-panel:not(.hidden) { animation-duration: 0.01ms; animation-iteration-count: 1; }
+        #output-panel:not(.hidden) { animation-duration: 0.01ms; animation-iteration-count: 1; }
       }
     </style>
   </head>
@@ -474,7 +457,6 @@
       </section>
 
       <div id="status-bar" class="status-bar" data-tone="neutral" role="status" aria-live="polite">
-        <span class="status-indicator" aria-hidden="true"></span>
         <span id="status">Connecting to Figma…</span>
       </div>
 
