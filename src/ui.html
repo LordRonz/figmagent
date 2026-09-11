@@ -90,7 +90,7 @@
 
       .selection {
         display: grid;
-        grid-template-columns: 34px minmax(0, 1fr) auto;
+        grid-template-columns: 34px minmax(0, 1fr);
         align-items: center;
         gap: 10px;
         min-height: 58px;
@@ -133,19 +133,11 @@
         white-space: nowrap;
       }
 
-      .selection-ready {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--text-tertiary);
-      }
-
       .selection.has-selection .selection-icon {
         border-color: var(--figma-color-border-brand-strong, var(--brand));
         color: var(--brand);
         background: var(--brand-soft);
       }
-      .selection.has-selection .selection-ready { background: var(--success); }
 
       .actions { display: grid; gap: 8px; }
       .secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -449,7 +441,6 @@
           <strong id="selection-name">Waiting for Figma…</strong>
           <span id="selection-meta" class="selection-meta"></span>
         </div>
-        <span class="selection-ready" aria-hidden="true"></span>
       </section>
 
       <section class="actions" aria-label="Export design context">
