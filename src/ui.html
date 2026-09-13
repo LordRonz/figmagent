@@ -7,34 +7,36 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 12px;
         --bg: var(--figma-color-bg, #ffffff);
         --bg-secondary: var(--figma-color-bg-secondary, #f5f5f5);
-        --bg-tertiary: var(--figma-color-bg-tertiary, #ebebeb);
         --text: var(--figma-color-text, #1e1e1e);
         --text-secondary: var(--figma-color-text-secondary, #6e6e6e);
-        --text-tertiary: var(--figma-color-text-tertiary, #9b9b9b);
         --border: var(--figma-color-border, #dedede);
         --border-strong: var(--figma-color-border-strong, #c7c7c7);
         --brand: var(--figma-color-bg-brand, #0d99ff);
-        --brand-hover: var(--figma-color-bg-brand-hover, #007be5);
-        --on-brand: var(--figma-color-text-onbrand, #ffffff);
         --brand-soft: var(--figma-color-bg-brand-tertiary, #e5f4ff);
-        --success: var(--figma-color-text-success, #198f51);
-        --success-bg: var(--figma-color-bg-success-tertiary, #e7f8ef);
+        --selection-bg: color-mix(in srgb, var(--brand-soft) 35%, var(--bg));
+        --selection-border: color-mix(in srgb, var(--brand) 25%, var(--border));
         --warning: var(--figma-color-text-warning, #9b6500);
         --warning-bg: var(--figma-color-bg-warning-tertiary, #fff4d6);
-        --danger: var(--figma-color-text-danger, #dc3412);
         --danger-bg: var(--figma-color-bg-danger-tertiary, #fff0ec);
         --focus: var(--figma-color-border-brand, #0d99ff);
         --radius: 12px;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
+
+      .figma-light { color-scheme: light; }
+      .figma-dark { color-scheme: dark; }
 
       * { box-sizing: border-box; }
 
       body {
+        display: flex;
+        flex-direction: column;
         min-width: 280px;
+        min-height: 100vh;
         margin: 0;
         color: var(--text);
         background: var(--bg);
@@ -43,202 +45,192 @@
 
       button, input, summary { font: inherit; }
       button, summary, label { -webkit-tap-highlight-color: transparent; }
-      h1, h2, p, pre { margin: 0; }
-
-      .app-header {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        min-height: 56px;
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--border);
-        background: var(--bg);
-      }
-
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 0;
-      }
-
-      .brand-mark {
-        display: grid;
-        flex: 0 0 auto;
-        width: 28px;
-        height: 28px;
-        place-items: center;
-        border-radius: 8px;
-        color: var(--on-brand);
-        background: var(--brand);
-      }
-
-      .brand-copy { min-width: 0; }
-      .brand h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
-      .brand p { margin-top: 1px; color: var(--text-secondary); font-size: 10px; line-height: 1.3; }
+      button svg { flex: 0 0 auto; }
+      h2, p, pre { margin: 0; }
 
       .content {
         display: grid;
         width: 100%;
         max-width: 680px;
         margin: 0 auto;
-        gap: 12px;
-        padding: 14px 16px 20px;
+        gap: 16px;
+        padding: 20px;
       }
 
       .selection {
+        position: relative;
         display: grid;
-        grid-template-columns: 34px minmax(0, 1fr);
+        grid-template-columns: 24px minmax(0, 1fr);
         align-items: center;
         gap: 10px;
-        min-height: 58px;
-        padding: 10px 12px;
+        min-height: 72px;
+        padding: 14px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--bg-secondary);
       }
 
+      .selection.has-selection { border-color: var(--selection-border); background: var(--selection-bg); }
+      .selection::before, .selection::after {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border: 1px solid var(--border-strong);
+        background: var(--bg);
+        content: "";
+      }
+      .selection::before { top: 10px; left: -3px; }
+      .selection::after { right: -3px; bottom: 10px; }
+      .selection.has-selection::before, .selection.has-selection::after { border-color: var(--brand); }
+
       .selection-icon {
         display: grid;
-        width: 34px;
-        height: 34px;
+        width: 24px;
+        height: 24px;
         place-items: center;
-        border: 1px solid var(--border);
-        border-radius: 9px;
         color: var(--text-secondary);
-        background: var(--bg);
       }
 
       .selection-copy { min-width: 0; }
       .selection strong {
-        display: block;
+        display: -webkit-box;
         overflow: hidden;
-        font-size: 12px;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow-wrap: anywhere;
+        font-size: 15px;
         font-weight: 600;
-        line-height: 1.35;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        letter-spacing: -0.025em;
+        line-height: 1.3;
       }
 
       .selection-meta {
-        display: block;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
         overflow: hidden;
-        margin-top: 2px;
+        margin-top: 4px;
         color: var(--text-secondary);
-        font-size: 10px;
-        line-height: 1.35;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        font-size: 11px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
       }
 
       .selection.has-selection .selection-icon {
-        border-color: var(--figma-color-border-brand-strong, var(--brand));
         color: var(--brand);
-        background: var(--brand-soft);
       }
 
-      .actions { display: grid; gap: 8px; }
-      .secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .actions { display: grid; gap: 10px; }
+      .secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+      .secondary-actions button { justify-content: flex-start; min-height: 36px; border-color: transparent; background: var(--bg-secondary); font-size: 11px; text-align: left; }
+      .secondary-actions button svg { color: var(--text-secondary); }
 
+      .feedback { display: grid; gap: 6px; }
       .baseline-status {
         margin: 0;
         color: var(--text-secondary);
         font-size: 10px;
-        line-height: 1.35;
+        line-height: 1.5;
       }
 
       button {
         display: inline-flex;
         min-width: 0;
-        min-height: 34px;
+        min-height: 36px;
         align-items: center;
         justify-content: center;
         gap: 7px;
-        border: 1px solid var(--border-strong);
+        border: 1px solid var(--border);
         border-radius: 8px;
         padding: 7px 11px;
         color: var(--text);
         background: var(--bg);
-        font-weight: 550;
-        line-height: 1;
+        font-weight: 500;
+        line-height: 1.4;
         cursor: pointer;
         transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
       }
 
       button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-secondary); }
       button:active:not(:disabled) { transform: translateY(1px); }
-      button:disabled { cursor: default; opacity: 0.42; }
-      button svg { flex: 0 0 auto; }
+      button:disabled { cursor: not-allowed; opacity: 0.45; }
 
       button.primary {
-        min-height: 40px;
-        border-color: var(--brand);
-        color: var(--on-brand);
-        background: var(--brand);
+        position: relative;
+        overflow: hidden;
+        justify-content: flex-start;
+        gap: 10px;
+        min-height: 46px;
+        padding-inline: 14px;
+        border-color: var(--text);
+        color: var(--bg);
+        background: var(--text);
         font-weight: 600;
       }
-      button.primary:hover:not(:disabled) { border-color: var(--brand-hover); background: var(--brand-hover); }
+      button.primary:hover:not(:disabled) { border-color: var(--text); background: color-mix(in srgb, var(--text) 88%, var(--bg)); }
+
+      .copy-loader { display: none; }
+      #copy-ai[aria-busy="true"] { opacity: 1; cursor: progress; }
+      #copy-ai[aria-busy="true"] .copy-icon { display: none; }
+      #copy-ai[aria-busy="true"] .copy-loader { display: block; }
+      #copy-ai[aria-busy="true"] .scan-line { animation: frame-scan 1.4s ease-in-out infinite alternate; }
+      #copy-ai[aria-busy="true"]::after {
+        position: absolute;
+        inset: auto 0 0;
+        height: 2px;
+        background: var(--brand);
+        transform: translateX(-100%);
+        animation: copy-sweep 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        content: "";
+      }
 
       .button-hint {
         margin-left: auto;
-        padding: 3px 5px;
-        border-radius: 4px;
+        padding-left: 12px;
+        border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
         color: inherit;
-        background: rgba(255, 255, 255, 0.18);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
+        font: 10px/1.5 var(--mono);
       }
 
-      button:focus-visible, summary:focus-visible, input:focus-visible {
+      button:focus-visible, summary:focus-visible, input:focus-visible, .preview-scroll:focus-visible {
         outline: 2px solid var(--focus);
         outline-offset: 2px;
       }
 
       .status-bar {
-        display: grid;
-        align-items: center;
-        min-height: 30px;
-        padding: 7px 10px;
-        border-radius: 8px;
+        min-height: 18px;
         color: var(--text-secondary);
-        background: var(--bg-secondary);
-        font-size: 10px;
-        line-height: 1.4;
+        font-size: 11px;
+        line-height: 1.5;
       }
 
-      .status-bar[data-tone="success"] { color: var(--success); background: var(--success-bg); }
-      .status-bar[data-tone="error"] { color: var(--danger); background: var(--danger-bg); }
+      .status-bar[data-tone="error"] { padding: 10px; border-radius: 8px; color: var(--text); background: var(--danger-bg); }
 
       details.settings {
-        border: 1px solid var(--border);
-        border-radius: 10px;
+        border-block: 1px solid var(--border);
         background: var(--bg);
       }
 
       summary {
         display: flex;
-        min-height: 36px;
+        min-height: 42px;
         align-items: center;
         gap: 8px;
-        padding: 8px 10px;
+        padding: 10px 0;
         list-style: none;
         color: var(--text-secondary);
-        font-weight: 550;
+        font-weight: 500;
         cursor: pointer;
       }
       summary::-webkit-details-marker { display: none; }
       summary:hover { color: var(--text); }
-      summary svg { margin-left: auto; transition: transform 140ms ease; }
-      details[open] summary svg { transform: rotate(180deg); }
+      summary .chevron { margin-left: auto; transition: transform 140ms ease; }
+      details[open] summary .chevron { transform: rotate(180deg); }
 
       .options {
         display: grid;
         gap: 0;
-        padding: 0 10px 7px;
-        border-top: 1px solid var(--border);
+        padding: 0 0 10px;
       }
 
       .option {
@@ -246,29 +238,21 @@
         grid-template-columns: 16px minmax(0, 1fr);
         align-items: start;
         gap: 9px;
-        padding: 9px 0;
+        padding: 10px 0;
         color: var(--text);
         line-height: 1.35;
         cursor: pointer;
       }
       .option + .option { border-top: 1px solid var(--border); }
-      .option span { display: grid; gap: 2px; }
-      .option small { color: var(--text-secondary); font-size: 10px; line-height: 1.35; }
+      .option span { display: grid; gap: 4px; }
+      .option small { color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 
       .option input {
-        appearance: none;
         width: 16px;
         height: 16px;
-        margin: 0;
-        border: 1px solid var(--border-strong);
-        border-radius: 4px;
-        background: var(--bg);
+        margin: 1px 0 0;
+        accent-color: var(--text);
         cursor: pointer;
-      }
-      .option input:checked {
-        border-color: var(--brand);
-        background: var(--brand);
-        box-shadow: inset 0 0 0 3px var(--brand), inset 0 0 0 4px var(--on-brand);
       }
 
       .panel {
@@ -280,45 +264,46 @@
 
       .panel-header {
         display: flex;
-        min-height: 38px;
+        min-height: 42px;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        padding: 9px 10px;
+        padding: 10px 14px;
         border-bottom: 1px solid var(--border);
       }
 
       .panel h2 { font-size: 12px; font-weight: 600; }
       .format-badge, .asset-kind {
-        border-radius: 5px;
-        padding: 3px 5px;
         color: var(--text-secondary);
-        background: var(--bg-secondary);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.03em;
+        font: 10px/1.4 var(--mono);
         text-transform: uppercase;
       }
+      .asset-kind { min-width: 48px; padding: 5px; border: 1px solid var(--border); border-radius: 4px; text-align: center; font-family: inherit; }
 
       .metrics {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         border-bottom: 1px solid var(--border);
       }
-      .metric { min-width: 0; padding: 8px 10px; }
+      .metric { min-width: 0; padding: 12px 14px; }
       .metric + .metric { border-left: 1px solid var(--border); }
-      .metric strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-      .metric span { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 10px; }
+      .metric strong { display: block; overflow: hidden; font-size: 17px; font-weight: 550; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+      .metric span { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 10px; }
 
-      #preview {
+      .preview-scroll {
         max-height: 260px;
         overflow: auto;
-        padding: 11px;
+        scrollbar-width: thin;
+      }
+      .preview-scroll:focus-visible { outline-offset: -2px; }
+
+      #preview {
+        padding: 14px;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
         color: var(--text-secondary);
         background: var(--bg-secondary);
-        font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font: 10px/1.7 var(--mono);
         tab-size: 2;
       }
 
@@ -332,41 +317,45 @@
       .warning {
         display: grid;
         gap: 3px;
-        padding: 9px 10px;
-        color: var(--warning);
+        padding: 12px 14px;
+        color: var(--text);
         background: var(--warning-bg);
         line-height: 1.4;
       }
       .warning + .warning { border-top: 1px solid var(--border); }
-      .warning-code { font-size: 10px; font-weight: 650; letter-spacing: 0.03em; }
+      .warning-code { font-size: 10px; font-weight: 650; }
       .warning-message { color: var(--text); }
 
       .companion-notice {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
-        padding: 10px;
+        padding: 12px;
+        border-radius: var(--radius);
         color: var(--warning);
         background: var(--warning-bg);
         line-height: 1.4;
       }
-      .companion-notice span { flex: 1; color: var(--text); }
-      .companion-notice button { flex: 0 0 auto; min-height: 28px; padding: 5px 8px; font-size: 10px; }
+      .companion-notice span { flex: 1 1 180px; color: var(--text); }
+      .companion-notice button { flex: 0 0 auto; min-height: 32px; padding: 5px 8px; font-size: 11px; }
 
       .asset {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
         gap: 9px;
-        min-height: 48px;
-        padding: 7px 9px;
+        min-height: 60px;
+        padding: 10px 12px;
       }
       .asset + .asset { border-top: 1px solid var(--border); }
       .asset-copy { min-width: 0; }
       .asset-name, .asset-file { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .asset-name { font-weight: 550; }
-      .asset-file { margin-top: 2px; color: var(--text-secondary); font-size: 10px; }
-      .asset button { min-height: 28px; padding: 5px 8px; font-size: 10px; }
+      .asset-name { font-weight: 500; }
+      .asset-file { margin-top: 4px; color: var(--text-secondary); font-size: 10px; }
+      .asset button { min-height: 32px; padding: 5px 8px; font-size: 11px; }
+
+      .app-footer { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: auto; padding: 16px 20px 20px; color: var(--text-secondary); font-size: 10px; }
 
       #output-panel:not(.hidden) { animation: output-reveal 180ms cubic-bezier(0.16, 1, 0.3, 1); }
       .hidden { display: none; }
@@ -376,47 +365,53 @@
         to { opacity: 1; clip-path: inset(0 0 0 0 round var(--radius)); transform: translateY(0); }
       }
 
+      @keyframes frame-scan { from { transform: translateY(-3px); } to { transform: translateY(3px); } }
+      @keyframes copy-sweep {
+        0% { transform: translateX(-100%) scaleX(0.35); }
+        50% { transform: translateX(0) scaleX(0.55); }
+        100% { transform: translateX(100%) scaleX(0.35); }
+      }
+
       @media (min-width: 520px) {
-        .content { padding: 18px 20px 24px; gap: 14px; }
-        .actions { grid-template-columns: minmax(200px, 1.35fr) minmax(210px, 1fr); }
-        .secondary-actions { min-width: 0; }
+        .content { padding: 24px; gap: 18px; }
+        .secondary-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .secondary-actions button { flex-direction: column; justify-content: center; gap: 6px; padding: 10px 6px; }
       }
 
       @media (max-width: 330px) {
-        .app-header { padding-inline: 12px; }
         .content { padding-inline: 12px; }
-        .secondary-actions { grid-template-columns: 1fr; }
-        .metrics { grid-template-columns: 1fr; }
-        .metric + .metric { border-top: 1px solid var(--border); border-left: 0; }
+        .secondary-actions button { gap: 6px; padding-inline: 8px; }
+        .metric { padding-inline: 10px; }
         .asset { grid-template-columns: auto minmax(0, 1fr); }
         .asset button { grid-column: 1 / -1; width: 100%; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        button, summary svg { transition-duration: 0.01ms; }
+        button, summary .chevron { transition-duration: 0.01ms; }
         #output-panel:not(.hidden) { animation-duration: 0.01ms; animation-iteration-count: 1; }
+        #copy-ai[aria-busy="true"] .scan-line, #copy-ai[aria-busy="true"]::after { animation: none; transform: none; }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not(.figma-light):not(.figma-dark) {
+          --bg: #242424;
+          --bg-secondary: #2e2e2e;
+          --text: #f5f5f5;
+          --text-secondary: #b6b6b6;
+          --border: #424242;
+          --border-strong: #626262;
+          --brand-soft: #17364d;
+          --warning-bg: #453519;
+          --danger-bg: #4d2925;
+        }
       }
     </style>
   </head>
   <body>
-    <header class="app-header">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-            <path d="M3.5 4.5h4v4h-4zM10.5 4.5h4v4h-4zM3.5 11.5h4M10.5 11.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-        <div class="brand-copy">
-          <h1>Figmagent</h1>
-          <p>Design context for AI</p>
-        </div>
-      </div>
-    </header>
-
     <main class="content">
       <section id="selection-card" class="selection" aria-labelledby="selection-name">
         <span class="selection-icon" aria-hidden="true">
-          <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden="true">
             <path d="M3.5 3.5h11v11h-11zM1.75 6.25v-4.5h4.5M11.75 1.75h4.5v4.5M16.25 11.75v4.5h-4.5M6.25 16.25h-4.5v-4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
@@ -428,10 +423,14 @@
 
       <section class="actions" aria-label="Export design context">
         <button id="copy-ai" class="primary" type="button" disabled>
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <svg class="copy-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M5.5 2.5h6a2 2 0 0 1 2 2v6M10.5 5.5h-6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <span>Copy for AI</span>
+          <svg class="copy-loader" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 6V2h4m4 0h4v4m0 4v4h-4m-4 0H2v-4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+            <path class="scan-line" d="M5 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span id="copy-ai-label">Copy for AI</span>
           <span class="button-hint">FIGM/1</span>
         </button>
         <div class="secondary-actions">
@@ -448,19 +447,26 @@
             <span>Assets</span>
           </button>
           <button id="download-handoff" type="button" disabled>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 2v8m-3-3 3 3 3-3M3 10.5v3h10v-3" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             <span>Download handoff</span>
           </button>
           <button id="copy-changes" type="button" disabled>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M5 2v12m6-12v3a3 3 0 0 1-3 3H5m3-3L5 8l3 3" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             <span>Copy changes</span>
           </button>
         </div>
       </section>
 
-      <div id="status-bar" class="status-bar" data-tone="neutral" role="status" aria-live="polite">
-        <span id="status">Connecting to Figma…</span>
+      <div class="feedback">
+        <div id="status-bar" class="status-bar" data-tone="neutral" role="status" aria-live="polite">
+          <span id="status">Connecting to Figma…</span>
+        </div>
+        <p id="baseline-status" class="baseline-status">No baseline yet · create a full handoff first.</p>
       </div>
-
-      <p id="baseline-status" class="baseline-status">No baseline yet · create a full handoff first.</p>
 
       <div id="companion-notice" class="companion-notice hidden" role="status">
         <span>Companion assets changed. Download a new handoff to include replacement files.</span>
@@ -469,8 +475,11 @@
 
       <details class="settings">
         <summary>
-          Export options
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 5h3m4 0h5M2 11h7m4 0h1M5 3v4h4V3H5Zm4 6v4h4V9H9Z" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Export options
+          <svg class="chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </summary>
@@ -492,7 +501,10 @@
           <span class="format-badge">FIGM/1</span>
         </header>
         <div id="output-meta" class="metrics"></div>
-        <pre id="preview"></pre>
+        <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll the output preview. -->
+        <section class="preview-scroll" tabindex="0" aria-label="FIGM output preview">
+          <pre id="preview"></pre>
+        </section>
       </section>
 
       <section id="warnings-panel" class="panel hidden" aria-labelledby="warnings-heading">
@@ -511,6 +523,12 @@
         <ul id="assets"></ul>
       </section>
     </main>
+    <footer class="app-footer">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M5 7V5a3 3 0 0 1 6 0v2M4 7h8v7H4V7Z" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Your design stays on your device.
+    </footer>
     <script>/*__UI_SCRIPT__*/</script>
   </body>
 </html>

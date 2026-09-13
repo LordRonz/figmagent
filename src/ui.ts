@@ -12,6 +12,7 @@ const element = <T extends HTMLElement>(id: string): T => {
 };
 
 const copyAi = element<HTMLButtonElement>("copy-ai");
+const copyAiLabel = element<HTMLElement>("copy-ai-label");
 const copyJson = element<HTMLButtonElement>("copy-json");
 const copyChangesButton = element<HTMLButtonElement>("copy-changes");
 const downloadHandoffButton = element<HTMLButtonElement>("download-handoff");
@@ -117,6 +118,10 @@ function updateBaselineStatus(): void {
 }
 
 function setActionState(disabled: boolean): void {
+  if (!disabled) {
+    copyAi.removeAttribute("aria-busy");
+    copyAiLabel.textContent = "Copy for AI";
+  }
   copyAi.disabled = disabled || !hasSelection;
   copyJson.disabled = disabled || !hasSelection;
   copyChangesButton.disabled = disabled || !canCopyChanges();
@@ -125,7 +130,9 @@ function setActionState(disabled: boolean): void {
   downloadFromNotice.disabled = disabled || !hasSelection;
 }
 
-function setBusy(message: string): void {
+function setBusy(message: string, aiLabel?: string): void {
+  copyAi.setAttribute("aria-busy", String(aiLabel !== undefined));
+  copyAiLabel.textContent = aiLabel ?? "Copy for AI";
   statusBar.dataset.tone = "busy";
   statusBar.setAttribute("aria-busy", "true");
   status.textContent = message;
@@ -186,7 +193,10 @@ function requestGenerate(kind: ActionKind): void {
   const id = ++requestId;
   const scopeKey = currentScopeKey();
   pending.set(id, { kind, scopeKey, revision: pluginRevision, viewRevision });
-  setBusy(kind === "preview" ? "Preparing assets…" : "Generating design context…");
+  setBusy(
+    kind === "preview" ? "Preparing assets…" : "Generating design context…",
+    kind === "ai" ? "Preparing context…" : undefined,
+  );
   post({ type: "GENERATE", requestId: id, revision: pluginRevision, scopeKey, options: options() });
 }
 
@@ -212,6 +222,7 @@ async function copyOutput(
   actionRevision: number,
   actionViewRevision: number,
 ): Promise<void> {
+  setBusy("Copying design context…", kind === "ai" ? "Copying…" : undefined);
   try {
     await copyText(kind === "ai" ? output.ai : output.json);
     if (

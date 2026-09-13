@@ -4,6 +4,7 @@ import test from "node:test";
 import { assignAssetFilenames, retainedAssetIds, retainedAssets } from "../src/assets";
 import { compareContexts, serializeDelta } from "../src/delta";
 import { createVirtualRoot, sniffImage } from "../src/extract";
+import type { PluginToUiMessage, UiToPluginMessage } from "../src/messages";
 import {
   countNodes,
   isRecord,
@@ -466,6 +467,7 @@ test("plugin UI keeps every scripted control and result target", () => {
   const html = readFileSync("src/ui.html", "utf8");
   for (const id of [
     "copy-ai",
+    "copy-ai-label",
     "copy-json",
     "copy-changes",
     "download-handoff",
@@ -501,4 +503,145 @@ test("copy actions copy generated output when processing finishes", () => {
   const resultHandler = ui.slice(start);
   assert.match(resultHandler, /await copyOutput\(\s*action\.kind,\s*message\.output,/);
   assert.doesNotMatch(resultHandler, /click .* again to copy/);
+});
+
+test("AI loading follows generation and clipboard work, and clears on interruption or failure", async (t) => {
+  const mockElement = () => {
+    const attributes = new Map<string, string>();
+    return Object.assign(new EventTarget(), {
+      textContent: "",
+      checked: false,
+      disabled: false,
+      style: {},
+      dataset: {},
+      classList: { add: () => undefined, remove: () => undefined, toggle: () => undefined },
+      append: () => undefined,
+      replaceChildren: () => undefined,
+      select: () => undefined,
+      remove: () => undefined,
+      setAttribute: (key: string, value: string) => attributes.set(key, value),
+      removeAttribute: (key: string) => attributes.delete(key),
+      getAttribute: (key: string) => attributes.get(key),
+    });
+  };
+  const elements = new Map(
+    [...readFileSync("src/ui.html", "utf8").matchAll(/id="([^"]+)"/g)].map((match) => [
+      match[1],
+      mockElement(),
+    ]),
+  );
+  const get = (id: string) => {
+    const element = elements.get(id);
+    assert.ok(element, `missing #${id}`);
+    return element;
+  };
+  const sent: UiToPluginMessage[] = [];
+  const pluginWindow = {
+    onmessage: (_event: { data: { pluginMessage: PluginToUiMessage } }): Promise<void> =>
+      Promise.resolve(),
+  };
+  let finishCopy = () => {};
+  let failCopy = false;
+  let copied = "";
+  const globals = {
+    window: pluginWindow,
+    document: {
+      getElementById: (id: string) => elements.get(id),
+      createElement: mockElement,
+      body: mockElement(),
+      execCommand: () => false,
+    },
+    parent: {
+      postMessage: ({ pluginMessage }: { pluginMessage: UiToPluginMessage }) =>
+        sent.push(pluginMessage),
+    },
+    navigator: {
+      clipboard: {
+        writeText: (text: string) => {
+          copied = text;
+          return failCopy
+            ? Promise.reject(new Error("Clipboard unavailable"))
+            : new Promise<void>((resolve) => {
+                finishCopy = resolve;
+              });
+        },
+      },
+    },
+  };
+  for (const [key, value] of Object.entries(globals)) {
+    const original = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    t.after(() => {
+      if (original) Object.defineProperty(globalThis, key, original);
+      else Reflect.deleteProperty(globalThis, key);
+    });
+  }
+  await import("../src/ui");
+  const send = (pluginMessage: PluginToUiMessage) =>
+    pluginWindow.onmessage({ data: { pluginMessage } });
+  const click = (id: string) => get(id).dispatchEvent(new Event("click"));
+  const idle = () => {
+    assert.notEqual(get("copy-ai").getAttribute("aria-busy"), "true");
+    assert.equal(get("copy-ai-label").textContent, "Copy for AI");
+    assert.equal(get("copy-ai").disabled, false);
+  };
+  await send({
+    type: "SELECTION",
+    pageId: "1:1",
+    revision: 0,
+    selection: [{ id: "12:4", name: "Payment card", type: "FRAME" }],
+  });
+  click("copy-ai");
+  assert.equal(get("copy-ai").getAttribute("aria-busy"), "true");
+  assert.equal(get("copy-ai-label").textContent, "Preparing context…");
+  assert.equal(get("copy-ai").disabled, true);
+  const request = sent[sent.length - 1];
+  assert.ok(request?.type === "GENERATE");
+  const context = fixtureContext();
+  const ai = serializeForAi(context);
+  const result = send({
+    ...request,
+    type: "RESULT",
+    output: {
+      context,
+      ai,
+      figm: serializeFigm(context),
+      json: serializeJson(context),
+      nodeCount: 4,
+    },
+  });
+  assert.equal(get("copy-ai-label").textContent, "Copying…");
+  assert.equal(get("copy-ai").getAttribute("aria-busy"), "true");
+  assert.equal(copied, ai);
+  finishCopy();
+  await result;
+  idle();
+
+  click("copy-ai");
+  assert.equal(get("copy-ai-label").textContent, "Copying…", "cached output still shows copying");
+  finishCopy();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  idle();
+  failCopy = true;
+  click("copy-ai");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(get("status").textContent, "Figma could not access the clipboard");
+  idle();
+
+  await send({ type: "STALE", revision: 1 });
+  click("copy-ai");
+  await send({ type: "ERROR", message: "Export failed" });
+  idle();
+  click("copy-ai");
+  await send({ type: "STALE", revision: 2 });
+  idle();
+  click("copy-ai");
+  get("include-hidden").dispatchEvent(new Event("change"));
+  idle();
+  click("prepare");
+  assert.notEqual(
+    get("copy-ai").getAttribute("aria-busy"),
+    "true",
+    "other actions do not animate AI",
+  );
 });
