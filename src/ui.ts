@@ -19,6 +19,7 @@ const downloadHandoffButton = element<HTMLButtonElement>("download-handoff");
 const prepare = element<HTMLButtonElement>("prepare");
 const includeHidden = element<HTMLInputElement>("include-hidden");
 const includeAll = element<HTMLInputElement>("include-all");
+const omitNames = element<HTMLInputElement>("omit-layer-names");
 const status = element<HTMLElement>("status");
 const statusBar = element<HTMLDivElement>("status-bar");
 const baselineStatus = element<HTMLElement>("baseline-status");
@@ -79,6 +80,7 @@ function options(): ExportOptions {
   return {
     includeHidden: includeHidden.checked,
     includeAllVariantsAndModes: includeAll.checked,
+    omitLayerNames: omitNames.checked,
   };
 }
 
@@ -89,6 +91,7 @@ function currentScopeKey(): string {
     [...selectedIds].sort(),
     current.includeHidden,
     current.includeAllVariantsAndModes,
+    current.omitLayerNames === true,
   ]);
 }
 
@@ -403,7 +406,11 @@ async function finishHandoff(
     ];
     const archive = createZip(entries);
     const root = output.context.roots[0];
-    const name = root && root.type !== "SELECTION" ? root.name : output.context.source.document;
+    const name = options().omitLayerNames
+      ? "handoff"
+      : root && root.type !== "SELECTION"
+        ? (root.name ?? root.id)
+        : output.context.source.document;
     const filename = `${sanitizeFilename(name)}.zip`;
     download(filename, "application/zip", archive);
     if (!currentAction(action, action.scopeKey, action.revision)) return;
@@ -437,7 +444,7 @@ copyChangesButton.addEventListener("click", () => {
 downloadHandoffButton.addEventListener("click", requestHandoff);
 downloadFromNotice.addEventListener("click", requestHandoff);
 prepare.addEventListener("click", () => requestGenerate("preview"));
-for (const input of [includeHidden, includeAll]) {
+for (const input of [includeHidden, includeAll, omitNames]) {
   input.addEventListener("change", () => {
     invalidateView();
     setReady("Options changed; create a new full handoff for this scope");

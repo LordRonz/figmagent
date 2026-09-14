@@ -43,6 +43,7 @@ function selectionKey(options: ExportOptions): string {
     ids,
     options.includeHidden,
     options.includeAllVariantsAndModes,
+    options.omitLayerNames === true,
   ]);
 }
 

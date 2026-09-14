@@ -1,4 +1,5 @@
 import { assetPath, assignAssetFilenames, retainedAssets } from "./assets";
+import { omitLayerNames } from "./omit-layer-names";
 import { countNodes, isRecord, normalizeObject, normalizeValue, sanitizeFilename } from "./plain";
 import { serializeFigm, serializeForAi, serializeJson } from "./serialize";
 import type {
@@ -724,6 +725,7 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
     assets: [...state.assets.values()].sort((a, b) => a.id.localeCompare(b.id)),
     warnings: state.warnings,
   };
+  if (options.omitLayerNames) omitLayerNames(context);
   const nodeCount = countNodes(contextRoots);
   if (nodeCount > 2_000) {
     context.warnings.push({
