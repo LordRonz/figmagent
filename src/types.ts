@@ -4,6 +4,7 @@ export type JsonObject = { [key: string]: JsonValue };
 
 export interface ExportOptions {
   includeHidden: boolean;
+  omitLayerNames?: boolean;
   includeAllVariantsAndModes: boolean;
 }
 
@@ -69,7 +70,7 @@ export interface DefinitionTable {
 export interface DesignNode {
   id: string;
   type: string;
-  name: string;
+  name?: string;
   visible?: boolean;
   geometry: JsonObject;
   layout?: JsonObject;

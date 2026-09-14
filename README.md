@@ -58,6 +58,22 @@ After a successful **Copy for AI** or **Download handoff**, **Copy changes** com
 
 By default, hidden descendants and unused variants/modes are excluded. Advanced options can include hidden layers plus the complete variant and mode matrix for referenced components and variables. The plugin never scans or loads the full document.
 
+## Layer names and sharing
+
+**Export options → Omit layer names** removes node names from both FIGM and JSON, uses IDs for component/variant labels and asset filenames, and names handoff archives `handoff.zip`. IDs, hierarchy, visible text, geometry, and component properties remain intact. Names are omitted by default. Uncheck this option when meaningful labels would help implementation. Changing this option requires a new full handoff before copying changes.
+
+This is **not anonymization**: document/page names, variable/style names, visible text, annotations, descriptions, developer resources, warnings, and asset contents may still contain internal information. Review exports and companion assets before sharing. Figmagent makes no uploads; pasting or uploading an export to an AI service shares it with that service.
+
+`npm run benchmark` reports token savings from this option using `o200k_base`. Its small/medium/large fixtures are synthetic repetitions of one representative design, not a survey of real Figma files; savings depend on naming and design complexity. Current net savings (including ID-based component labels and asset filenames):
+
+| Fixture | FIGM tokens saved | Pretty JSON tokens saved | Compact JSON tokens saved |
+| --- | ---: | ---: | ---: |
+| Small | 7 (1.3%) | 20 (1.3%) | 8 (0.9%) |
+| Medium | 71 (3.7%) | 160 (2.8%) | 100 (3.1%) |
+| Large | 311 (4.4%) | 685 (3.2%) | 445 (3.7%) |
+
+These fixtures do not support the claim that layer names make up most of the JSON.
+
 ## Development
 
 ```sh

@@ -57,7 +57,7 @@ assets:
 The essential conventions are:
 
 - Two spaces represent one hierarchy level.
-- Each node begins with its uppercase Figma node type, quoted name, and stable ID.
+- Each node begins with its uppercase Figma node type, optional quoted name, and stable ID. With **Omit layer names**, for example: `FRAME id="12:4" size=343x188`. JSON likewise omits node `name` fields. Component/variant labels and asset filenames use IDs instead of layer names; implementation properties remain unchanged.
 - Properties use `key=value`; strings use JSON escaping.
 - Measurements default to the header's declared unit, currently `px`.
 - Colors use `#RRGGBB` or `#RRGGBBAA`.

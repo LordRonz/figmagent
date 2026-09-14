@@ -503,7 +503,9 @@ function nodeLine(
   clipped?: ClipState,
 ): string[] {
   const geometry = node.geometry;
-  const parts = [node.type, quote(node.name), `id=${quote(node.id)}`];
+  const parts = [node.type];
+  if (node.name !== undefined) parts.push(quote(node.name));
+  parts.push(`id=${quote(node.id)}`);
   const width = geometry.width;
   const height = geometry.height;
   if (typeof width === "number" && typeof height === "number")

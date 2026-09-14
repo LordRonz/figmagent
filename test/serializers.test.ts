@@ -16,6 +16,7 @@ import { serializeFigm, serializeForAi, serializeJson } from "../src/serialize";
 import type { DesignNode } from "../src/types";
 import { createZip } from "../src/zip";
 import { fixtureContext } from "./fixture";
+import "./omit-layer-names.test";
 
 test("normalizes colors, floating point values, keys, and special values", () => {
   assert.deepEqual(
@@ -474,6 +475,7 @@ test("plugin UI keeps every scripted control and result target", () => {
     "prepare",
     "include-hidden",
     "include-all",
+    "omit-layer-names",
     "status",
     "status-bar",
     "baseline-status",
@@ -492,6 +494,7 @@ test("plugin UI keeps every scripted control and result target", () => {
   ]) {
     assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
   }
+  assert.match(html, /<input id="omit-layer-names" type="checkbox" checked\s*\/>/);
   assert.doesNotMatch(html, /https?:\/\//, "the local-only UI must not load remote resources");
 });
 
@@ -627,6 +630,15 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(get("status").textContent, "Figma could not access the clipboard");
   idle();
+
+  get("omit-layer-names").checked = true;
+  get("omit-layer-names").dispatchEvent(new Event("change"));
+  assert.equal(get("copy-changes").disabled, true, "name option invalidates baseline scope");
+  click("copy-ai");
+  const unnamedRequest = sent[sent.length - 1];
+  assert.ok(unnamedRequest?.type === "GENERATE");
+  assert.equal(unnamedRequest.options.omitLayerNames, true);
+  assert.notEqual(unnamedRequest.scopeKey, request.scopeKey);
 
   await send({ type: "STALE", revision: 1 });
   click("copy-ai");
