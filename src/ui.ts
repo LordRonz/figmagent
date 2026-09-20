@@ -175,21 +175,33 @@ function invalidateView(): void {
 }
 
 async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.append(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    if (!copied) throw new Error("Figma could not access the clipboard");
+  const startedAtRevision = viewRevision;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      if (startedAtRevision !== viewRevision) return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      try {
+        textarea.select();
+        if (document.execCommand("copy")) return;
+      } catch {
+        // Clipboard access can fail temporarily in Figma's embedded UI.
+      } finally {
+        textarea.remove();
+      }
+    }
   }
+  throw new Error("Figma could not access the clipboard");
 }
 
 function requestGenerate(kind: ActionKind): void {

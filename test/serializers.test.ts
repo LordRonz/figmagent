@@ -545,6 +545,7 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   };
   let finishCopy = () => {};
   let failCopy = false;
+  let copyAttempts = 0;
   let copied = "";
   const globals = {
     window: pluginWindow,
@@ -561,6 +562,7 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
     navigator: {
       clipboard: {
         writeText: (text: string) => {
+          copyAttempts += 1;
           copied = text;
           return failCopy
             ? Promise.reject(new Error("Clipboard unavailable"))
@@ -625,11 +627,44 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   finishCopy();
   await new Promise<void>((resolve) => setImmediate(resolve));
   idle();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const nextAttempt = async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(100);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  };
   failCopy = true;
+  copyAttempts = 0;
   click("copy-ai");
   await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(copyAttempts, 1);
+  assert.equal(get("copy-ai-label").textContent, "Copying…");
+  failCopy = false;
+  await nextAttempt();
+  finishCopy();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(copyAttempts, 2, "transient failure retries and stops on success");
+  assert.equal(get("status").textContent, "Copied FIGM/1 context · baseline updated");
+  idle();
+
+  failCopy = true;
+  copyAttempts = 0;
+  click("copy-ai");
+  await nextAttempt();
+  await nextAttempt();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(copyAttempts, 3, "persistent failure stops after three attempts");
   assert.equal(get("status").textContent, "Figma could not access the clipboard");
   idle();
+
+  copyAttempts = 0;
+  click("copy-ai");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  get("include-hidden").dispatchEvent(new Event("change"));
+  await nextAttempt();
+  assert.equal(copyAttempts, 1, "changed scope cancels pending retries");
+  idle();
+  t.mock.timers.reset();
 
   get("omit-layer-names").checked = true;
   get("omit-layer-names").dispatchEvent(new Event("change"));
