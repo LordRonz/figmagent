@@ -1,10 +1,5 @@
 import { retainedAssets } from "./assets";
-import {
-  exportAsset,
-  extractSelection,
-  prepareAssetFilenames,
-  prepareHandoffAssets,
-} from "./extract";
+import { exportAsset, extractSelection, prepareHandoffAssets } from "./extract";
 import type { PluginToUiMessage, UiToPluginMessage } from "./messages";
 import type { ExportOptions, GeneratedOutput } from "./types";
 
@@ -83,8 +78,6 @@ async function generatedOutput(
   if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
   if (cache?.key === scopeKey && cache.revision === requestRevision) return cache.output;
   const output = await extractSelection(options);
-  if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
-  await prepareAssetFilenames(output);
   if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
   cache = { key: scopeKey, revision: requestRevision, output };
   return output;

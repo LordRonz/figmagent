@@ -1,23 +1,14 @@
+import { crc32 } from "./crc32";
+
 export interface ZipEntry {
   name: string;
   data: Uint8Array | string;
 }
 
 const encoder = new TextEncoder();
-const crcTable = Array.from({ length: 256 }, (_, index) => {
-  let value = index;
-  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
-  return value >>> 0;
-});
 
 function bytes(data: Uint8Array | string): Uint8Array {
   return typeof data === "string" ? encoder.encode(data) : data;
-}
-
-function crc32(data: Uint8Array): number {
-  let value = 0xffffffff;
-  for (const byte of data) value = (value >>> 8) ^ (crcTable[(value ^ byte) & 0xff] ?? 0);
-  return (value ^ 0xffffffff) >>> 0;
 }
 
 function word(value: number): Uint8Array {
@@ -51,7 +42,7 @@ function safeName(name: string): string {
   return normalized;
 }
 
-export function createZip(entries: ZipEntry[]): Uint8Array {
+export function createZip(entries: ZipEntry[], checksumFor = crc32): Uint8Array {
   const local: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
@@ -63,7 +54,7 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
     names.add(name);
     const nameBytes = encoder.encode(name);
     const data = bytes(entry.data);
-    const checksum = crc32(data);
+    const checksum = checksumFor(data);
     if (nameBytes.length > 0xffff || data.length > 0xffffffff || offset > 0xffffffff)
       throw new Error("ZIP entry is too large");
 

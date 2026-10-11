@@ -1,8 +1,9 @@
 import { retainedAssets } from "./assets";
-import { compareContexts, serializeDelta, snapshotId } from "./delta";
+import { compareContexts, serializeDelta } from "./delta";
 import type { PluginToUiMessage, UiToPluginMessage } from "./messages";
 import { groupWarnings, sanitizeFilename } from "./plain";
 import type { AssetDescriptor, DesignContext, ExportOptions, GeneratedOutput } from "./types";
+import { handoffChecksum, prewarmWasm, snapshotFromJson } from "./wasm";
 import { createZip } from "./zip";
 
 const element = <T extends HTMLElement>(id: string): T => {
@@ -205,6 +206,7 @@ async function copyText(text: string): Promise<void> {
 }
 
 function requestGenerate(kind: ActionKind): void {
+  void prewarmWasm();
   const id = ++requestId;
   const scopeKey = currentScopeKey();
   pending.set(id, { kind, scopeKey, revision: pluginRevision, viewRevision });
@@ -216,6 +218,7 @@ function requestGenerate(kind: ActionKind): void {
 }
 
 function requestHandoff(): void {
+  void handoffChecksum();
   const id = ++requestId;
   const scopeKey = currentScopeKey();
   pending.set(id, { kind: "handoff", scopeKey, revision: pluginRevision, viewRevision });
@@ -260,7 +263,7 @@ async function copyOutput(
 
 function establishBaseline(output: GeneratedOutput, scopeKey: string): void {
   const context = JSON.parse(output.json) as DesignContext;
-  baseline = { context, scopeKey, snapshot: snapshotId(context) };
+  baseline = { context, scopeKey, snapshot: snapshotFromJson(output.json) };
   companionNotice.classList.add("hidden");
   updateBaselineStatus();
 }
@@ -275,7 +278,10 @@ async function copyChanges(
     setReady("Selection or options changed; create a full handoff first");
     return;
   }
-  const delta = compareContexts(baseline.context, output.context);
+  const delta = compareContexts(baseline.context, output.context, {
+    baseline: baseline.snapshot,
+    current: snapshotFromJson(output.json),
+  });
   if (!delta.changed) {
     companionNotice.classList.add("hidden");
     setReady("No changes to copy");
@@ -416,7 +422,9 @@ async function finishHandoff(
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([, file]) => ({ name: file.filename, data: file.data })),
     ];
-    const archive = createZip(entries);
+    const checksumFor = await handoffChecksum();
+    if (!currentAction(action, action.scopeKey, action.revision)) return;
+    const archive = createZip(entries, checksumFor);
     const root = output.context.roots[0];
     const name = options().omitLayerNames
       ? "handoff"

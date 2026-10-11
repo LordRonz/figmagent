@@ -1,7 +1,9 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { context } from "esbuild";
+import { buildWasm } from "./build-wasm.mjs";
 
 const watch = process.argv.includes("--watch");
+const wasm = await buildWasm();
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
@@ -23,6 +25,7 @@ const ui = await context({
   format: "iife",
   target: "es2020",
   write: false,
+  define: { __CRC_WASM_BASE64__: JSON.stringify(wasm.toString("base64")) },
   logLevel: "info",
 });
 

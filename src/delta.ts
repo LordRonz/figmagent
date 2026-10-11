@@ -83,55 +83,42 @@ function position(item: FlattenedNode): NodePosition {
   return { parentId: item.parentId, index: item.index };
 }
 
-function descendantsOf(rootId: string, nodes: Map<string, FlattenedNode>): Set<string> {
-  // ponytail: O(n²) ancestor walk; selections are bounded by extraction warnings, so an index is not worth the code yet.
-  const result = new Set<string>();
-  for (const [id, item] of nodes) {
-    let parentId = item.parentId;
-    while (parentId !== null) {
-      if (parentId === rootId) {
-        result.add(id);
-        break;
-      }
-      parentId = nodes.get(parentId)?.parentId ?? null;
-    }
-  }
-  result.add(rootId);
-  return result;
-}
-
-function descriptorChanged(baseline: DesignContext, current: DesignContext, id: string): boolean {
-  const before = baseline.assets.find((asset) => asset.id === id);
-  const after = current.assets.find((asset) => asset.id === id);
-  return !same(before ?? null, after ?? null);
-}
-
 function changedAssetIds(
   baseline: DesignContext,
   current: DesignContext,
   changedNodeIds: Set<string>,
+  beforeNodes: Map<string, FlattenedNode>,
+  afterNodes: Map<string, FlattenedNode>,
 ): string[] {
-  const ids = new Set([
-    ...baseline.assets.map((asset) => asset.id),
-    ...current.assets.map((asset) => asset.id),
-  ]);
-  const beforeNodes = flatten(baseline.roots, null);
-  const afterNodes = flatten(current.roots, null);
+  const beforeAssets = new Map(baseline.assets.map((asset) => [asset.id, asset]));
+  const afterAssets = new Map(current.assets.map((asset) => [asset.id, asset]));
+  const ids = new Set([...beforeAssets.keys(), ...afterAssets.keys()]);
+  const affected = new Set<string>();
+  for (const nodes of [beforeNodes, afterNodes]) {
+    const visited = new Set<string>();
+    for (const id of changedNodeIds) {
+      let item = nodes.get(id);
+      while (item && !visited.has(item.node.id)) {
+        visited.add(item.node.id);
+        affected.add(item.node.id);
+        item = item.parentId === null ? undefined : nodes.get(item.parentId);
+      }
+    }
+  }
   const beforeRetained = retainedAssetIds(baseline);
   const afterRetained = retainedAssetIds(current);
   const changed = new Set<string>();
   for (const id of ids) {
     if (
-      descriptorChanged(baseline, current, id) ||
+      !same(beforeAssets.get(id) ?? null, afterAssets.get(id) ?? null) ||
       beforeRetained.has(id) !== afterRetained.has(id)
     ) {
       changed.add(id);
       continue;
     }
-    const asset = current.assets.find((candidate) => candidate.id === id);
+    const asset = afterAssets.get(id);
     if (!asset || (asset.kind !== "vector" && asset.kind !== "screenshot")) continue;
-    const subtree = descendantsOf(asset.nodeId, afterNodes);
-    if ([...changedNodeIds].some((nodeId) => subtree.has(nodeId))) changed.add(id);
+    if (affected.has(asset.nodeId)) changed.add(id);
     if (!afterNodes.has(asset.nodeId) && beforeNodes.has(asset.nodeId)) changed.add(id);
   }
   return [...changed].sort();
@@ -147,7 +134,11 @@ export function snapshotId(context: DesignContext): string {
   return `snapshot:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-export function compareContexts(baseline: DesignContext, current: DesignContext): SnapshotDelta {
+export function compareContexts(
+  baseline: DesignContext,
+  current: DesignContext,
+  snapshotIds?: Pick<SnapshotDelta, "baseline" | "current">,
+): SnapshotDelta {
   const before = flatten(baseline.roots, null);
   const after = flatten(current.roots, null);
   const addedIds = new Set<string>();
@@ -199,6 +190,8 @@ export function compareContexts(baseline: DesignContext, current: DesignContext)
       ...addedIds,
       ...removedIds,
     ]),
+    before,
+    after,
   );
   const definitionsChanged = !same(baseline.definitions, current.definitions);
   const sourceChanged = !same(baseline.source, current.source);
@@ -214,8 +207,8 @@ export function compareContexts(baseline: DesignContext, current: DesignContext)
     warningsChanged;
 
   return {
-    baseline: snapshotId(baseline),
-    current: snapshotId(current),
+    baseline: snapshotIds?.baseline ?? snapshotId(baseline),
+    current: snapshotIds?.current ?? snapshotId(current),
     changed,
     assetChanges,
     changes: { added, removed, updated, moved },

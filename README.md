@@ -6,11 +6,12 @@ It runs in Figma Design, Dev Mode, and Figma for VS Code. It has no backend, tel
 
 ## Set up
 
-Requirements: current Node.js/npm and the current Figma desktop app for local plugin registration.
+Requirements: current Node.js/npm, Rust 1.78 or newer with the `wasm32-unknown-unknown` target, and the current Figma desktop app for local plugin registration. Rust is needed only to build the plugin; users receive the compiled Wasm inside the UI bundle.
 
 1. Install and build:
 
    ```sh
+   rustup target add wasm32-unknown-unknown
    npm install
    npm run check
    ```
@@ -18,7 +19,7 @@ Requirements: current Node.js/npm and the current Figma desktop app for local pl
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select this repository's `manifest.json`.
 3. Select a layer or frame and run **Figmagent**. **Copy for AI** or **Copy JSON** prepares the selection and copies the result when it is ready. **Download handoff** creates a FIGM-and-assets ZIP; **Assets** exposes individual downloads.
 
-Run `npm run dev` while editing the plugin sandbox. Re-run `npm run build` after UI changes, then use Figma's development-plugin reload.
+Run `npm run dev` while editing the plugin sandbox. Re-run `npm run build` after UI or Rust changes, then use Figma's development-plugin reload.
 
 ## Output
 
@@ -78,8 +79,12 @@ These fixtures do not support the claim that layer names make up most of the JSO
 
 ```sh
 npm run typecheck   # strict TypeScript check
-npm test            # focused node:test serializer checks
+npm test            # serializers, snapshots, assets, and Wasm parity checks
 npm run benchmark   # o200k_base token comparison
+npm run benchmark:performance # ZIP/checksum timings, including copies into Wasm
+npm run benchmark:copy # FIGM formatting
+npm run benchmark:logic # 2k/10k/20k-layer CPU benchmarks, including Wasm copies
+npm run test:rust    # Rust checksum and snapshot hash checks
 npm run build       # dist/code.js and dist/ui.html
 npm run lint        # Biome linting
 npm run format      # Biome formatting
@@ -87,6 +92,10 @@ npm run check       # lint, format check, typecheck, tests, and production build
 ```
 
 The benchmark enforces at least 60% median token savings against pretty JSON, rejects `FIGM/1` if it becomes materially larger than compact JSON, and asserts that core implementation signals survive compaction. Current representative fixtures cover Auto Layout, absolute geometry, mixed rich text, gradients, effects, variables, instances, variants, hidden content, interactions, escaping, warnings, and assets.
+
+Handoff ZIP checksums and snapshot hashing run in a small Rust/Wasm module embedded in `dist/ui.html`. Initialization starts when context generation or a handoff is requested, alongside Figma API work. Until Wasm is ready, or if initialization fails, snapshots use JavaScript; ZIP packaging waits for initialization and falls back on failure. Snapshot hashing reuses already serialized JSON and preserves existing snapshot IDs. Change comparison reuses those IDs and tracks affected ancestors instead of repeatedly scanning the whole tree for every asset. No network fetch is required. See [Rust/Wasm performance and scope](docs/rust-wasm.md) for measurements and the boundary imposed by Figma's plugin runtime.
+
+Initial **Copy for AI** assigns stable raster `.bin` filenames without reading image bytes. Individual asset downloads keep those names so copied references stay valid. **Download handoff** detects formats while exporting, then updates the ZIP filenames and `design.figm` together. Developer links are read once per selected subtree alongside the REST export, with a three-second timeout and an explicit warning when unavailable. `benchmark:copy` measures formatting only; real desktop measurements are recorded in the performance document.
 
 ## Boundaries
 

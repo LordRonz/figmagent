@@ -137,6 +137,7 @@ interface ExtractionState {
   variableTasks: Map<string, Promise<void>>;
   styleTasks: Map<string, Promise<void>>;
   componentTasks: Map<string, Promise<void>>;
+  devResources: Map<string, JsonValue[]>;
 }
 
 function warn(
@@ -500,20 +501,8 @@ async function extractPluginMetadata(
   if (isRecord(bindings) && Object.keys(bindings).length) result.bindings = bindings as JsonObject;
 
   if (root || actual.type === "INSTANCE" || actual.type === "COMPONENT") {
-    try {
-      const resources = normalizeValue(
-        await actual.getDevResourcesAsync({ includeChildren: false }),
-      );
-      if (Array.isArray(resources) && resources.length) result.devResources = resources;
-    } catch (error) {
-      warn(
-        state,
-        "DEV_RESOURCES_UNAVAILABLE",
-        "Developer resources could not be read",
-        error,
-        actual.id,
-      );
-    }
+    const resources = state.devResources.get(actual.id);
+    if (resources?.length) result.devResources = resources;
   }
 
   const refs = addAssets(actual, state);
@@ -592,7 +581,42 @@ function initialState(options: ExportOptions): ExtractionState {
     variableTasks: new Map(),
     styleTasks: new Map(),
     componentTasks: new Map(),
+    devResources: new Map(),
   };
+}
+
+async function readDevResources(root: SceneNode, state: ExtractionState): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const resources = await Promise.race([
+      root.getDevResourcesAsync({ includeChildren: true }),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Developer resources timed out after 3 seconds")),
+          3_000,
+        );
+      }),
+    ]);
+    const byNode = new Map<string, JsonValue[]>();
+    for (const resource of resources) {
+      const normalized = normalizeValue(resource);
+      if (normalized === undefined) continue;
+      const existing = byNode.get(resource.nodeId) ?? [];
+      existing.push(normalized);
+      byNode.set(resource.nodeId, existing);
+    }
+    for (const [nodeId, links] of byNode) state.devResources.set(nodeId, links);
+  } catch (error) {
+    warn(
+      state,
+      "DEV_RESOURCES_UNAVAILABLE",
+      "Developer resources could not be read",
+      error,
+      root.id,
+    );
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 }
 
 async function settleDefinitionTasks(state: ExtractionState): Promise<void> {
@@ -662,7 +686,10 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
   for (const selectedNode of selected) {
     const actualById = new Map(descendants(selectedNode).map((node) => [node.id, node]));
     try {
-      const raw = await exportedRoot(selectedNode);
+      const [raw] = await Promise.all([
+        exportedRoot(selectedNode),
+        readDevResources(selectedNode, state),
+      ]);
       const root = await normalizeNode(raw, actualById, state, true);
       if (root) roots.push(root);
     } catch (error) {
@@ -733,6 +760,7 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
       message: `This selection contains ${nodeCount} nodes; select a smaller subtree if the LLM context is too large.`,
     });
   }
+  assignAssetFilenames(context);
   let figm = serializeFigm(context);
   let json = serializeJson(context);
   if (figm.length > 250_000 || json.length > 250_000) {
@@ -746,7 +774,7 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
   return {
     context,
     figm,
-    ai: serializeForAi(context),
+    ai: serializeForAi(context, figm),
     json,
     nodeCount,
   };
@@ -765,33 +793,12 @@ export function sniffImage(bytes: Uint8Array): { mime: string; extension: string
 
 function refreshOutput(output: GeneratedOutput): void {
   output.figm = serializeFigm(output.context);
-  output.ai = serializeForAi(output.context);
+  output.ai = serializeForAi(output.context, output.figm);
   output.json = serializeJson(output.context);
 }
 
 function filenameExtension(filename: string): string | undefined {
   return /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase();
-}
-
-export async function prepareAssetFilenames(output: GeneratedOutput): Promise<void> {
-  const extensions = new Map<string, string>();
-  for (const asset of retainedAssets(output.context).filter((item) => item.kind === "raster")) {
-    try {
-      const exported = await exportAsset(asset);
-      asset.status = "available";
-      const extension = filenameExtension(exported.filename);
-      if (extension) extensions.set(asset.id, extension);
-    } catch (error) {
-      asset.status = "unavailable";
-      output.context.warnings.push({
-        code: "ASSET_UNAVAILABLE",
-        message: error instanceof Error ? error.message : "A raster asset could not be read",
-        nodeId: asset.nodeId,
-      });
-    }
-  }
-  assignAssetFilenames(output.context, extensions);
-  refreshOutput(output);
 }
 
 export interface AssetExportProgress {
@@ -810,7 +817,7 @@ export async function prepareHandoffAssets(
   for (const [index, asset] of required.entries()) {
     let result: Awaited<ReturnType<typeof exportAsset>>;
     try {
-      result = await exportAsset(asset);
+      result = await exportAsset(asset, true);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The asset could not be exported";
       throw new Error(`Required asset "${asset.name}" failed: ${detail}`);
@@ -837,6 +844,7 @@ export async function prepareHandoffAssets(
 
 export async function exportAsset(
   descriptor: AssetDescriptor,
+  detectFilename = false,
 ): Promise<{ filename: string; mime: string; data: Uint8Array | string }> {
   if (descriptor.kind === "raster") {
     if (!descriptor.imageHash) throw new Error("This raster asset has no image hash");
@@ -845,9 +853,10 @@ export async function exportAsset(
     const data = await image.getBytesAsync();
     const detected = sniffImage(data);
     return {
-      filename: descriptor.filename.endsWith(`.${detected.extension}`)
-        ? descriptor.filename
-        : `${sanitizeFilename(descriptor.name)}.${detected.extension}`,
+      filename:
+        !detectFilename || descriptor.filename.endsWith(`.${detected.extension}`)
+          ? descriptor.filename
+          : `${sanitizeFilename(descriptor.name)}.${detected.extension}`,
       mime: detected.mime,
       data,
     };

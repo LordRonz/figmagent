@@ -6,14 +6,19 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:wasm": "node scripts/build-wasm.mjs",
     "dev": "node scripts/build.mjs --watch",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/run-node.mjs --test test/serializers.test.ts",
+    "test": "npm run build:wasm && node scripts/run-node.mjs --test test/serializers.test.ts && node scripts/run-node.mjs --test test/wasm.test.ts && node scripts/run-node.mjs --test test/copy-preparation.test.ts && node scripts/run-node.mjs --test test/delta-assets.test.ts",
     "benchmark": "node scripts/run-node.mjs benchmark/format.ts",
-    "check": "biome check . && npm run typecheck && npm test && npm run build"
+    "benchmark:performance": "npm run build:wasm && node scripts/run-node.mjs benchmark/performance.ts",
+    "benchmark:copy": "node scripts/run-node.mjs benchmark/copy.ts",
+    "benchmark:logic": "npm run build:wasm && node scripts/run-node.mjs benchmark/logic.ts",
+    "test:rust": "cargo test --manifest-path wasm/Cargo.toml",
+    "check": "biome check . && npm run typecheck && npm run test:rust && npm test && npm run build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",

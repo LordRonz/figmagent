@@ -643,6 +643,6 @@ export function serializeJson(context: DesignContext): string {
   return stableStringify(context);
 }
 
-export function serializeForAi(context: DesignContext): string {
-  return AI_PREAMBLE + serializeFigm(context);
+export function serializeForAi(context: DesignContext, figm = serializeFigm(context)): string {
+  return AI_PREAMBLE + figm;
 }
