@@ -677,6 +677,14 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
 
   await send({ type: "STALE", revision: 1 });
   click("copy-ai");
+  const replacementRequest = sent[sent.length - 1];
+  assert.ok(replacementRequest?.type === "GENERATE");
+  await send({ type: "STALE", requestId: unnamedRequest.requestId, revision: 1 });
+  assert.equal(
+    get("copy-ai-label").textContent,
+    "Preparing context…",
+    "a late stale reply for an old request must not cancel a newer request",
+  );
   await send({ type: "ERROR", message: "Export failed" });
   idle();
   click("copy-ai");

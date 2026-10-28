@@ -12,7 +12,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build:wasm && node scripts/run-node.mjs --test test/serializers.test.ts && node scripts/run-node.mjs --test test/wasm.test.ts && node scripts/run-node.mjs --test test/copy-preparation.test.ts && node scripts/run-node.mjs --test test/delta-assets.test.ts",
+    "test": "npm run build:wasm && node scripts/run-node.mjs --test test/serializers.test.ts && node scripts/run-node.mjs --test test/wasm.test.ts && node scripts/run-node.mjs --test test/copy-preparation.test.ts && node scripts/run-node.mjs --test test/delta-assets.test.ts && node scripts/run-node.mjs --test test/copy-invalidation.test.ts",
     "benchmark": "node scripts/run-node.mjs benchmark/format.ts",
     "benchmark:performance": "npm run build:wasm && node scripts/run-node.mjs benchmark/performance.ts",
     "benchmark:copy": "node scripts/run-node.mjs benchmark/copy.ts",

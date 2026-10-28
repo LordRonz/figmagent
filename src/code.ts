@@ -26,6 +26,46 @@ class StaleRequest extends Error {
 
 let cache: CachedOutput | undefined;
 let revision = 0;
+let watchedNodeIds = new Set<string>();
+let watchedHasInstance = false;
+
+function refreshWatchedNodes(): void {
+  const ids = new Set<string>();
+  let hasInstance = false;
+  for (const root of figma.currentPage.selection) {
+    ids.add(root.id);
+    if (root.type === "INSTANCE") hasInstance = true;
+    if ("findAll" in root) {
+      for (const child of root.findAll()) {
+        ids.add(child.id);
+        if (child.type === "INSTANCE") hasInstance = true;
+      }
+    }
+    let ancestor: BaseNode | null = root.parent;
+    while (ancestor && ancestor.type !== "PAGE" && ancestor.type !== "DOCUMENT") {
+      ids.add(ancestor.id);
+      ancestor = ancestor.parent;
+    }
+  }
+  for (const id of Object.keys(cache?.output.context.definitions.components ?? {})) ids.add(id);
+  watchedNodeIds = ids;
+  watchedHasInstance = hasInstance;
+}
+
+function affectsSelection(event: NodeChangeEvent): boolean {
+  return event.nodeChanges.some((change) => {
+    if (change.id === figma.currentPage.id) return true;
+    if (watchedNodeIds.has(change.id)) return true;
+    let node: BaseNode | null = "parent" in change.node ? change.node : null;
+    while (node && node.type !== "PAGE" && node.type !== "DOCUMENT") {
+      if (watchedNodeIds.has(node.id)) return true;
+      if (watchedHasInstance && (node.type === "COMPONENT" || node.type === "COMPONENT_SET"))
+        return true;
+      node = node.parent;
+    }
+    return false;
+  });
+}
 
 function post(message: PluginToUiMessage): void {
   figma.ui.postMessage(message);
@@ -43,6 +83,7 @@ function selectionKey(options: ExportOptions): string {
 }
 
 function sendSelection(): void {
+  refreshWatchedNodes();
   post({
     type: "SELECTION",
     pageId: figma.currentPage.id,
@@ -80,6 +121,7 @@ async function generatedOutput(
   const output = await extractSelection(options);
   if (!isCurrent(requestRevision, scopeKey, options)) throw new StaleRequest();
   cache = { key: scopeKey, revision: requestRevision, output };
+  refreshWatchedNodes();
   return output;
 }
 
@@ -95,7 +137,12 @@ figma.on("selectionchange", () => {
 });
 
 let watchedPage = figma.currentPage;
-const invalidateForDocumentChange = () => invalidate();
+refreshWatchedNodes();
+const invalidateForDocumentChange = (event: NodeChangeEvent) => {
+  if (!affectsSelection(event)) return;
+  invalidate();
+  refreshWatchedNodes();
+};
 watchedPage.on("nodechange", invalidateForDocumentChange);
 figma.on("currentpagechange", () => {
   watchedPage.off("nodechange", invalidateForDocumentChange);
@@ -162,6 +209,7 @@ figma.ui.onmessage = async (message: UiToPluginMessage) => {
       });
       if (!isCurrent(message.revision, message.scopeKey, message.options)) throw new StaleRequest();
       cache = { key: message.scopeKey, revision: message.revision, output };
+      refreshWatchedNodes();
       for (const asset of assets) {
         if (!isCurrent(message.revision, message.scopeKey, message.options))
           throw new StaleRequest();

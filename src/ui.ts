@@ -499,6 +499,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
   }
 
   if (message.type === "STALE") {
+    if (message.requestId !== undefined && !pending.has(message.requestId)) return;
     pluginRevision = message.revision;
     invalidateView();
     setReady(
