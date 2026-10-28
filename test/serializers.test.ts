@@ -513,6 +513,9 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
     const attributes = new Map<string, string>();
     return Object.assign(new EventTarget(), {
       textContent: "",
+      value: "",
+      href: "",
+      download: "",
       checked: false,
       disabled: false,
       style: {},
@@ -520,13 +523,16 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
       classList: { add: () => undefined, remove: () => undefined, toggle: () => undefined },
       append: () => undefined,
       replaceChildren: () => undefined,
+      querySelectorAll: () => [],
       select: () => undefined,
+      click: () => undefined,
       remove: () => undefined,
       setAttribute: (key: string, value: string) => attributes.set(key, value),
       removeAttribute: (key: string) => attributes.delete(key),
       getAttribute: (key: string) => attributes.get(key),
     });
   };
+  const created: ReturnType<typeof mockElement>[] = [];
   const elements = new Map(
     [...readFileSync("src/ui.html", "utf8").matchAll(/id="([^"]+)"/g)].map((match) => [
       match[1],
@@ -547,13 +553,23 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   let failCopy = false;
   let copyAttempts = 0;
   let copied = "";
+  let legacyCopied = "";
+  let allowLegacyCopy = false;
   const globals = {
     window: pluginWindow,
     document: {
       getElementById: (id: string) => elements.get(id),
-      createElement: mockElement,
+      createElement: () => {
+        const element = mockElement();
+        created.push(element);
+        return element;
+      },
       body: mockElement(),
-      execCommand: () => false,
+      execCommand: () => {
+        if (!allowLegacyCopy) return false;
+        legacyCopied = created[created.length - 1]?.value ?? "";
+        return true;
+      },
     },
     parent: {
       postMessage: ({ pluginMessage }: { pluginMessage: UiToPluginMessage }) =>
@@ -698,5 +714,117 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
     get("copy-ai").getAttribute("aria-busy"),
     "true",
     "other actions do not animate AI",
+  );
+
+  // Figma desktop may expose neither ClipboardItem nor navigator.clipboard.
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: {} });
+  allowLegacyCopy = true;
+  created.length = 0;
+  const assetsRequest = sent[sent.length - 1];
+  assert.ok(assetsRequest?.type === "GENERATE");
+  await send({
+    ...assetsRequest,
+    type: "RESULT",
+    output: {
+      context,
+      ai,
+      figm: serializeFigm(context),
+      json: serializeJson(context),
+      nodeCount: 4,
+    },
+  });
+  const vector = context.assets.find((asset) => asset.kind === "vector");
+  const image = context.assets.find((asset) => asset.kind !== "vector");
+  assert.ok(vector);
+  assert.ok(image);
+  const imageButton = created.find(
+    (element) =>
+      element.getAttribute("aria-label") === `Select ${image.name} for Figma’s Copy as PNG`,
+  );
+  assert.ok(imageButton);
+  assert.equal(imageButton.disabled, false, "native selection is available without a helper");
+  const svgButton = created.find(
+    (element) => element.getAttribute("aria-label") === `Copy ${vector.name} as SVG code`,
+  );
+  assert.ok(svgButton);
+  svgButton.dispatchEvent(new Event("click"));
+  const assetRequest = sent[sent.length - 1];
+  assert.ok(assetRequest?.type === "EXPORT_ASSET");
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>';
+  await send({
+    ...assetRequest,
+    type: "ASSET",
+    filename: vector.filename,
+    mime: "image/svg+xml",
+    data: svg,
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(legacyCopied, svg, "SVG source reaches the legacy clipboard fallback");
+  assert.equal(get("status").textContent, `Copied ${vector.name} as SVG code`);
+
+  imageButton.dispatchEvent(new Event("click"));
+  const imageRequest = sent[sent.length - 1];
+  assert.ok(imageRequest?.type === "SELECT_ASSET");
+  assert.equal(imageRequest.asset.id, image.id);
+  assert.equal(
+    created.some((element) => element.download),
+    false,
+    "copy never downloads a file",
+  );
+  await send({ type: "ERROR", requestId: imageRequest.requestId, message: "Selection failed" });
+  assert.equal(get("status").textContent, "Selection failed");
+
+  const originalClipboardItem = Object.getOwnPropertyDescriptor(globalThis, "ClipboardItem");
+  Object.defineProperty(globalThis, "ClipboardItem", { configurable: true, value: class {} });
+  t.after(() => {
+    if (originalClipboardItem)
+      Object.defineProperty(globalThis, "ClipboardItem", originalClipboardItem);
+    else Reflect.deleteProperty(globalThis, "ClipboardItem");
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      clipboard: {
+        write: async () => {
+          throw new Error("Blocked by permissions policy");
+        },
+      },
+    },
+  });
+  created.length = 0;
+  click("prepare");
+  const retryRequest = sent[sent.length - 1];
+  assert.ok(retryRequest?.type === "GENERATE");
+  await send({
+    ...retryRequest,
+    type: "RESULT",
+    output: {
+      context,
+      ai,
+      figm: serializeFigm(context),
+      json: serializeJson(context),
+      nodeCount: 4,
+    },
+  });
+  const directCopy = created.find(
+    (element) => element.getAttribute("aria-label") === `Copy ${image.name} as PNG`,
+  );
+  assert.ok(directCopy);
+  directCopy.dispatchEvent(new Event("click"));
+  const deniedRequest = sent[sent.length - 1];
+  assert.ok(deniedRequest?.type === "EXPORT_ASSET");
+  await send({
+    ...deniedRequest,
+    type: "ASSET",
+    filename: image.filename,
+    mime: "image/png",
+    data: new Uint8Array([137, 80, 78, 71]),
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(sent[sent.length - 1]?.type, "SELECT_ASSET");
+  assert.equal(
+    created.some((element) => element.download),
+    false,
+    "denied writes never download",
   );
 });

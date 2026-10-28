@@ -242,13 +242,27 @@ figma.ui.onmessage = async (message: UiToPluginMessage) => {
     return;
   }
 
-  if (message.type === "EXPORT_ASSET") {
+  if (message.type === "EXPORT_ASSET" || message.type === "SELECT_ASSET") {
     try {
       if (!cache || cache.revision !== message.revision || cache.key !== message.scopeKey)
-        throw new Error("Generate the selection again before downloading this asset");
+        throw new Error("Generate the selection again before using this asset");
       const knownAsset = cache.output.context.assets.find((asset) => asset.id === message.asset.id);
-      if (!knownAsset)
-        throw new Error("Generate the selection again before downloading this asset");
+      if (!knownAsset) throw new Error("Generate the selection again before using this asset");
+      if (message.type === "SELECT_ASSET") {
+        const node = await figma.getNodeByIdAsync(knownAsset.nodeId);
+        if (!cache || cache.revision !== message.revision || cache.key !== message.scopeKey) {
+          sendStale(message.requestId);
+          return;
+        }
+        if (!node || node.type === "DOCUMENT" || node.type === "PAGE" || node.removed)
+          throw new Error("This asset's source layer is no longer available");
+        figma.currentPage.selection = [node];
+        figma.viewport.scrollAndZoomIntoView([node]);
+        figma.closePlugin(
+          "Layer selected. Press ⌘⇧C (Mac) or Ctrl+Shift+C (Windows) to copy as PNG.",
+        );
+        return;
+      }
       const result = await exportAsset(knownAsset);
       if (!cache || cache.revision !== message.revision || cache.key !== message.scopeKey) {
         sendStale(message.requestId);

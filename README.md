@@ -55,6 +55,8 @@ Rules:
 
 Use **Download handoff** when the receiving agent needs the FIGM file and its screenshots, vectors, or original raster files. The ZIP is created locally after every required asset exports successfully. Extraction warnings remain in `design.figm`; a failed asset export leaves no partial download and can be retried.
 
+Open **Assets** to copy or download individual companion assets. Where image clipboard access is available, **Copy** places a PNG image on the clipboard. In Figma desktop, choose **Select layer**: the plugin selects the asset’s source layer and closes. Press **⌘⇧C** (Mac) or **Ctrl+Shift+C** (Windows) to use Figma’s native **Copy as PNG**, then paste into your app. This copies the rendered layer, including crops and effects, rather than the original image bytes. A denied direct clipboard write also selects the layer for native copying. **Copy SVG** copies vector source code as text. **Download** preserves the original asset bytes. Copying never downloads an HTML page or requires a helper.
+
 After a successful **Copy for AI** or **Download handoff**, **Copy changes** compares the current canonical selection with that one in-memory baseline. It reports additions, removals, property replacements, moves, child reordering, and complete current definition tables. The baseline is scoped to the page, selected roots, and export options; changing any of those requires a new full handoff. See the [FIGM delta format](docs/FIGM-delta.md) for replacement semantics and asset-change handling.
 
 By default, hidden descendants and unused variants/modes are excluded. Advanced options can include hidden layers plus the complete variant and mode matrix for referenced components and variables. The plugin never scans or loads the full document.

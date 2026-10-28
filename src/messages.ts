@@ -17,7 +17,7 @@ export type UiToPluginMessage =
       options: ExportOptions;
     }
   | {
-      type: "EXPORT_ASSET";
+      type: "EXPORT_ASSET" | "SELECT_ASSET";
       requestId: number;
       revision: number;
       scopeKey: string;

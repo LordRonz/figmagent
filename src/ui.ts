@@ -1,4 +1,5 @@
 import { retainedAssets } from "./assets";
+import { supportsImageClipboard, writeAssetToClipboard } from "./clipboard";
 import { compareContexts, serializeDelta } from "./delta";
 import type { PluginToUiMessage, UiToPluginMessage } from "./messages";
 import { groupWarnings, sanitizeFilename } from "./plain";
@@ -36,6 +37,7 @@ const warningsPanel = element<HTMLElement>("warnings-panel");
 const warningsList = element<HTMLUListElement>("warnings");
 const assetsPanel = element<HTMLElement>("assets-panel");
 const assetsList = element<HTMLUListElement>("assets");
+const assetClipboardNotice = element<HTMLElement>("asset-clipboard-notice");
 
 type ActionKind = "ai" | "json" | "preview" | "changes";
 type PendingAction =
@@ -43,6 +45,8 @@ type PendingAction =
   | {
       kind: "asset";
       asset: AssetDescriptor;
+      resolve: (asset: BundleAsset) => void;
+      reject: (error: Error) => void;
       scopeKey: string;
       revision: number;
       viewRevision: number;
@@ -132,6 +136,7 @@ function setActionState(disabled: boolean): void {
   downloadHandoffButton.disabled = disabled || !hasSelection;
   prepare.disabled = disabled || !hasSelection;
   downloadFromNotice.disabled = disabled || !hasSelection;
+  for (const button of assetsList.querySelectorAll("button")) button.disabled = disabled;
 }
 
 function setBusy(message: string, aiLabel?: string): void {
@@ -169,6 +174,9 @@ function clearOutput(): void {
 
 function invalidateView(): void {
   viewRevision += 1;
+  for (const action of pending.values()) {
+    if (action.kind === "asset") action.reject(new Error("The design changed; generate again."));
+  }
   pending.clear();
   bundleAssets.clear();
   clearOutput();
@@ -316,6 +324,68 @@ async function copyChanges(
   }
 }
 
+function requestAsset(asset: AssetDescriptor): Promise<BundleAsset> {
+  return new Promise((resolve, reject) => {
+    const id = ++requestId;
+    const scopeKey = currentScopeKey();
+    pending.set(id, {
+      kind: "asset",
+      asset,
+      resolve,
+      reject,
+      scopeKey,
+      revision: pluginRevision,
+      viewRevision,
+    });
+    setBusy(`Exporting ${asset.name}…`);
+    post({ type: "EXPORT_ASSET", requestId: id, revision: pluginRevision, scopeKey, asset });
+  });
+}
+
+async function copyAsset(asset: AssetDescriptor): Promise<void> {
+  const revision = viewRevision;
+  try {
+    if (asset.kind === "vector") {
+      const result = await requestAsset(asset);
+      if (revision !== viewRevision) return;
+      await copyText(
+        typeof result.data === "string" ? result.data : new TextDecoder().decode(result.data),
+      );
+    } else if (!supportsImageClipboard()) {
+      selectAsset(asset);
+      return;
+    } else {
+      const exported = requestAsset(asset);
+      try {
+        await writeAssetToClipboard(exported, false);
+      } catch {
+        await exported;
+        if (revision !== viewRevision) return;
+        selectAsset(asset);
+        return;
+      }
+    }
+    if (revision !== viewRevision) return;
+    setReady(
+      `Copied ${asset.name}${asset.kind === "vector" ? " as SVG code" : " as PNG"}`,
+      "success",
+    );
+  } catch (error) {
+    if (revision !== viewRevision) return;
+    setError(
+      `${error instanceof Error ? error.message : "Asset copy failed"} You can also download this asset.`,
+    );
+  }
+}
+
+function selectAsset(asset: AssetDescriptor): void {
+  const id = ++requestId;
+  const scopeKey = currentScopeKey();
+  pending.set(id, { kind: "preview", scopeKey, revision: pluginRevision, viewRevision });
+  setBusy("Selecting layer for Figma’s Copy as PNG…");
+  post({ type: "SELECT_ASSET", requestId: id, revision: pluginRevision, scopeKey, asset });
+}
+
 function renderOutput(output: GeneratedOutput): void {
   outputPanel.classList.remove("hidden");
   outputMeta.replaceChildren();
@@ -356,6 +426,11 @@ function renderOutput(output: GeneratedOutput): void {
   }
 
   assetsList.replaceChildren();
+  const canCopyImages = supportsImageClipboard();
+  assetClipboardNotice.classList.toggle(
+    "hidden",
+    canCopyImages || !output.context.assets.some((asset) => asset.kind !== "vector"),
+  );
   assetsPanel.classList.toggle("hidden", output.context.assets.length === 0);
   for (const asset of output.context.assets) {
     const item = document.createElement("li");
@@ -372,17 +447,43 @@ function renderOutput(output: GeneratedOutput): void {
     filename.className = "asset-file";
     filename.textContent = asset.filename;
     copy.append(name, filename);
+    const actions = document.createElement("div");
+    actions.className = "asset-actions";
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.textContent =
+      asset.kind === "vector" ? "Copy SVG" : canCopyImages ? "Copy" : "Select layer";
+    copyButton.setAttribute(
+      "aria-label",
+      asset.kind !== "vector" && !canCopyImages
+        ? `Select ${asset.name} for Figma’s Copy as PNG`
+        : `Copy ${asset.name}${asset.kind === "vector" ? " as SVG code" : " as PNG"}`,
+    );
+    copyButton.title =
+      asset.kind === "vector"
+        ? "Copy SVG code"
+        : canCopyImages
+          ? "Copy image as PNG"
+          : "Select the source layer and close the plugin, then press ⌘⇧C or Ctrl+Shift+C to copy its appearance as PNG";
+    copyButton.addEventListener("click", () => void copyAsset(asset));
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = "Download";
-    button.addEventListener("click", () => {
-      const id = ++requestId;
-      const scopeKey = currentScopeKey();
-      pending.set(id, { kind: "asset", asset, scopeKey, revision: pluginRevision, viewRevision });
-      setBusy(`Exporting ${asset.name}…`);
-      post({ type: "EXPORT_ASSET", requestId: id, revision: pluginRevision, scopeKey, asset });
+    button.setAttribute("aria-label", `Download ${asset.name}`);
+    button.addEventListener("click", async () => {
+      const revision = viewRevision;
+      try {
+        const result = await requestAsset(asset);
+        if (revision !== viewRevision) return;
+        download(result.filename, result.mime, result.data);
+        setReady(`Downloaded ${result.filename}`, "success");
+      } catch (error) {
+        if (revision !== viewRevision) return;
+        setError(error instanceof Error ? error.message : "Asset download failed");
+      }
     });
-    item.append(kind, copy, button);
+    actions.append(copyButton, button);
+    item.append(kind, copy, actions);
     assetsList.append(item);
   }
 }
@@ -517,6 +618,10 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
       pending.delete(message.requestId);
       bundleAssets.delete(message.requestId);
     }
+    if (action?.kind === "asset") {
+      action.reject(new Error(message.message));
+      return;
+    }
     setError(
       action?.kind === "handoff"
         ? `Handoff failed: ${message.message}. Retry the download.`
@@ -564,8 +669,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
     if (action?.kind !== "asset") return;
     if (!currentAction(action, message.scopeKey, message.revision)) return;
     pending.delete(message.requestId);
-    download(message.filename, message.mime, message.data);
-    setReady(`Downloaded ${message.filename}`, "success");
+    action.resolve(message);
     return;
   }
 
@@ -578,7 +682,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
     cachedScopeKey = message.scopeKey;
     renderOutput(message.output);
     if (action.kind === "preview") {
-      setReady("Assets are ready to download", "success");
+      setReady("Assets are ready to copy or download", "success");
       return;
     }
     if (action.kind === "changes") {
