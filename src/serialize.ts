@@ -499,6 +499,7 @@ function nodeLine(
   depth: number,
   context: DesignContext,
   retainedAssets: Set<string>,
+  availableVectors: Set<string>,
   fixed = false,
   clipped?: ClipState,
 ): string[] {
@@ -533,15 +534,7 @@ function nodeLine(
   if (assetRefs?.length) parts.push(`assets=${assetRefs.map(quote).join(",")}`);
 
   const lines = [`${"  ".repeat(depth)}${parts.join(" ")}`];
-  if (
-    assetRefs?.some((id) =>
-      context.assets.some(
-        (asset) => asset.id === id && asset.kind === "vector" && asset.status === "available",
-      ),
-    )
-  ) {
-    return lines;
-  }
+  if (assetRefs?.some((id) => availableVectors.has(id))) return lines;
   const children = node.children ?? [];
   const fixedCount =
     typeof node.layout?.numberOfFixedChildren === "number"
@@ -555,6 +548,7 @@ function nodeLine(
         depth + 1,
         context,
         retainedAssets,
+        availableVectors,
         index >= fixedStart,
         childClipState(node, child),
       ),
@@ -620,7 +614,12 @@ export function serializeFigm(context: DesignContext): string {
     `source document=${quote(context.source.document)} page=${quote(context.source.page)}`,
   ];
   const retainedAssets = retainedAssetIds(context);
-  for (const root of context.roots) lines.push(...nodeLine(root, 0, context, retainedAssets));
+  const availableVectors = new Set<string>();
+  for (const asset of context.assets) {
+    if (asset.kind === "vector" && asset.status === "available") availableVectors.add(asset.id);
+  }
+  for (const root of context.roots)
+    lines.push(...nodeLine(root, 0, context, retainedAssets, availableVectors));
   lines.push(...definitionLines(context));
   if (context.assets.length) {
     lines.push("assets:");

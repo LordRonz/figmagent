@@ -65,7 +65,7 @@ type PendingAction =
   | { kind: "handoff"; scopeKey: string; revision: number; viewRevision: number };
 
 interface Baseline {
-  context: DesignContext;
+  json: string;
   scopeKey: string;
   snapshot: string;
 }
@@ -287,9 +287,12 @@ async function copyOutput(
   }
 }
 
-function establishBaseline(output: GeneratedOutput, scopeKey: string): void {
-  const context = JSON.parse(output.json) as DesignContext;
-  baseline = { context, scopeKey, snapshot: snapshotFromJson(output.json) };
+function establishBaseline(
+  output: GeneratedOutput,
+  scopeKey: string,
+  snapshot = snapshotFromJson(output.json),
+): void {
+  baseline = { json: output.json, scopeKey, snapshot };
   companionNotice.classList.add("hidden");
   updateBaselineStatus();
 }
@@ -304,11 +307,14 @@ async function copyChanges(
     setReady("Selection or options changed; create a full handoff first");
     return;
   }
-  const delta = compareContexts(baseline.context, output.context, {
-    baseline: baseline.snapshot,
-    current: snapshotFromJson(output.json),
-  });
-  if (!delta.changed) {
+  const delta =
+    baseline.json === output.json
+      ? undefined
+      : compareContexts(JSON.parse(baseline.json) as DesignContext, output.context, {
+          baseline: baseline.snapshot,
+          current: snapshotFromJson(output.json),
+        });
+  if (!delta?.changed) {
     companionNotice.classList.add("hidden");
     setReady("No changes to copy");
     return;
@@ -330,7 +336,7 @@ async function copyChanges(
       setReady("The design changed; generate again to refresh output");
       return;
     }
-    establishBaseline(output, scopeKey);
+    establishBaseline(output, scopeKey, delta.current);
     setReady(
       useFullExport
         ? "Changes exceeded the delta size; copied full FIGM/1 context · baseline updated"
@@ -653,11 +659,9 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
     const action = pending.get(message.requestId);
     if (action?.kind !== "handoff") return;
     if (!currentAction(action, message.scopeKey, message.revision)) return;
-    setBusy(
-      message.total
-        ? `Exporting assets… ${message.completed}/${message.total}`
-        : "Preparing handoff…",
-    );
+    status.textContent = message.total
+      ? `Exporting assets… ${message.completed}/${message.total}`
+      : "Preparing handoff…";
     return;
   }
 

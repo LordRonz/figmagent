@@ -174,6 +174,15 @@ test("handoff overlaps asset reads with a limit and keeps archive order", async 
   for (const { filename } of assets) assert.ok(output.figm.includes(`file="${filename}"`));
 });
 
+test("handoff reuses formatted output when exported asset metadata is already current", async (t) => {
+  const mock = mockFigma(t);
+  const output = await extractSelection(options);
+  const files = await prepareHandoffAssets(output);
+  Object.freeze(output);
+  assert.deepEqual(await prepareHandoffAssets(output), files);
+  assert.equal(mock.imageReads(), 2);
+});
+
 test("a failed asset export leaves the cached output untouched", async (t) => {
   mockFigma(t);
   const output = await extractSelection(options);

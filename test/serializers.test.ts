@@ -386,6 +386,22 @@ test("retains only FIGM assets and assigns safe collision-free names", () => {
   assert.ok(names.includes("card-logo.jpg"));
 });
 
+test("filename suffixes skip occupied names and can themselves be asset names", () => {
+  const context = fixtureContext();
+  const template = context.assets[1];
+  assert.ok(template);
+  context.assets = ["Icon-2", "Icon", "ICON", "Icon-3", "icon", "Icon-2"].map((name, i) => ({
+    ...template,
+    id: String(i),
+    name,
+  }));
+  assignAssetFilenames(context);
+  assert.deepEqual(
+    context.assets.map((asset) => asset.filename),
+    ["icon-2.svg", "icon.svg", "icon-3.svg", "icon-3-2.svg", "icon-4.svg", "icon-2-2.svg"],
+  );
+});
+
 test("compares canonical snapshots, including replacements, moves, definitions, and rendered assets", () => {
   const baseline = fixtureContext();
   const unchanged = structuredClone(baseline);
@@ -659,6 +675,43 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   assert.equal(copied, ai);
   idle();
 
+  let treeReads = 0;
+  const roots = context.roots;
+  Object.defineProperty(context, "roots", {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      treeReads++;
+      return roots;
+    },
+  });
+  click("copy-changes");
+  assert.equal(get("status").textContent, "No changes to copy");
+  assert.equal(treeReads, 0, "unchanged generated output skips the tree comparison");
+  Object.defineProperty(context, "roots", { value: roots, writable: true });
+
+  await send({ type: "STALE", revision: 1 });
+  click("copy-changes");
+  const changeRequest = sent[sent.length - 1];
+  assert.ok(changeRequest?.type === "GENERATE");
+  const edited = structuredClone(context);
+  const title = edited.roots[0]?.children?.[0];
+  assert.ok(title?.text);
+  title.text.characters = "New title";
+  await send({
+    ...changeRequest,
+    type: "RESULT",
+    output: {
+      context: edited,
+      figm: serializeFigm(edited),
+      ai: serializeForAi(edited),
+      json: serializeJson(edited),
+      nodeCount: 4,
+    },
+  });
+  assert.equal(get("status").textContent, "Companion assets changed; download a new handoff");
+  assert.equal(copied, ai);
+
   await send({ type: "STALE", revision: 1 });
   denyDeferredCopy = true;
   allowLegacyCopy = true;
@@ -801,6 +854,18 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(legacyCopied, svg, "SVG source reaches the legacy clipboard fallback");
   assert.equal(get("status").textContent, `Copied ${vector.name} as SVG code`);
+
+  click("download-handoff");
+  const handoff = sent[sent.length - 1];
+  assert.ok(handoff?.type === "DOWNLOAD_HANDOFF");
+  const buttonQueries = t.mock.method(get("assets"), "querySelectorAll");
+  await send({ ...handoff, type: "BUNDLE_PROGRESS", phase: "assets", completed: 4, total: 8 });
+  assert.equal(get("status").textContent, "Exporting assets… 4/8");
+  assert.equal(get("status-bar").getAttribute("aria-busy"), "true");
+  assert.equal(get("download-handoff").disabled, true);
+  assert.equal(buttonQueries.mock.callCount(), 0);
+  await send({ type: "ERROR", requestId: handoff.requestId, message: "Export failed" });
+  assert.equal(get("download-handoff").disabled, false);
 
   imageButton.dispatchEvent(new Event("click"));
   const imageRequest = sent[sent.length - 1];

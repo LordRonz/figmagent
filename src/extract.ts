@@ -763,6 +763,7 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
     warnings: state.warnings,
   };
   if (options.omitLayerNames) omitLayerNames(context);
+  else assignAssetFilenames(context);
   const nodeCount = countNodes(contextRoots);
   if (nodeCount > 2_000) {
     context.warnings.push({
@@ -770,7 +771,6 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
       message: `This selection contains ${nodeCount} nodes; select a smaller subtree if the LLM context is too large.`,
     });
   }
-  assignAssetFilenames(context);
   let figm = serializeFigm(context);
   let json = serializeJson(context);
   if (figm.length > 250_000 || json.length > 250_000) {
@@ -841,14 +841,20 @@ export async function prepareHandoffAssets(
     onProgress?.({ completed: exported.length, total: required.length });
   }
 
-  const extensions = new Map<string, string>();
-  for (const { asset, result } of exported) {
-    asset.status = "available";
-    const extension = filenameExtension(result.filename);
-    if (extension) extensions.set(asset.id, extension);
+  if (
+    exported.some(
+      ({ asset, result }) => asset.status !== "available" || asset.filename !== result.filename,
+    )
+  ) {
+    const extensions = new Map<string, string>();
+    for (const { asset, result } of exported) {
+      asset.status = "available";
+      const extension = filenameExtension(result.filename);
+      if (extension) extensions.set(asset.id, extension);
+    }
+    assignAssetFilenames(output.context, extensions);
+    refreshOutput(output);
   }
-  assignAssetFilenames(output.context, extensions);
-  refreshOutput(output);
   return exported.map(({ asset, result: { mime, data } }) => ({
     id: asset.id,
     filename: assetPath(asset),
