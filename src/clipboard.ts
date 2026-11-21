@@ -3,8 +3,44 @@ export interface ClipboardAsset {
   data: Uint8Array | string;
 }
 
-export function supportsImageClipboard(): boolean {
+export function supportsClipboardWrite(): boolean {
   return typeof ClipboardItem !== "undefined" && typeof navigator.clipboard?.write === "function";
+}
+
+async function writeClipboardItem(mime: string, data: Promise<Blob>): Promise<void> {
+  // An early clipboard rejection must still consume a later data failure.
+  void data.catch(() => {});
+  await navigator.clipboard.write([new ClipboardItem({ [mime]: data })]);
+}
+
+export interface PendingTextCopy {
+  finish: (text: string) => Promise<boolean>;
+  cancel: () => void;
+}
+
+export function startTextCopy(): PendingTextCopy | undefined {
+  if (!supportsClipboardWrite()) return;
+  let resolveText!: (text: string) => void;
+  let rejectText!: (error: Error) => void;
+  const text = new Promise<string>((resolve, reject) => {
+    resolveText = resolve;
+    rejectText = reject;
+  });
+  // Start the write during the click while Figma generates the text asynchronously.
+  const written = writeClipboardItem(
+    "text/plain",
+    text.then((value) => new Blob([value], { type: "text/plain" })),
+  ).then(
+    () => true,
+    () => false,
+  );
+  return {
+    finish: (value) => {
+      resolveText(value);
+      return written;
+    },
+    cancel: () => rejectText(new Error("Copy canceled")),
+  };
 }
 
 async function assetBlob(asset: ClipboardAsset, vector: boolean): Promise<Blob> {
@@ -44,8 +80,8 @@ export function writeAssetToClipboard(
 ): Promise<void> {
   // Start the clipboard write during the click; Figma exports the bytes asynchronously.
   const mime = vector ? "text/plain" : "image/png";
-  const data = asset.then((result) => assetBlob(result, vector));
-  // An early clipboard rejection must still consume a later export failure.
-  void data.catch(() => {});
-  return navigator.clipboard.write([new ClipboardItem({ [mime]: data })]);
+  return writeClipboardItem(
+    mime,
+    asset.then((result) => assetBlob(result, vector)),
+  );
 }

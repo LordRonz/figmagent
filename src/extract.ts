@@ -470,8 +470,18 @@ async function extractPluginMetadata(
     const main = await resolveComponent(actual, state);
     const next = { ...(component ?? {}) };
     if (main) next.mainComponent = main.id;
-    const properties = normalizeValue(actual.componentProperties);
-    if (properties !== undefined) next.properties = properties;
+    try {
+      const properties = normalizeValue(actual.componentProperties);
+      if (properties !== undefined) next.properties = properties;
+    } catch (error) {
+      warn(
+        state,
+        "COMPONENT_PROPERTIES_UNAVAILABLE",
+        "The instance's component properties could not be read",
+        error,
+        actual.id,
+      );
+    }
     const overrides = normalizeValue(actual.overrides);
     if (overrides !== undefined) next.overrides = overrides;
     result.component = next;
@@ -753,6 +763,7 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
     warnings: state.warnings,
   };
   if (options.omitLayerNames) omitLayerNames(context);
+  else assignAssetFilenames(context);
   const nodeCount = countNodes(contextRoots);
   if (nodeCount > 2_000) {
     context.warnings.push({
@@ -760,7 +771,6 @@ export async function extractSelection(options: ExportOptions): Promise<Generate
       message: `This selection contains ${nodeCount} nodes; select a smaller subtree if the LLM context is too large.`,
     });
   }
-  assignAssetFilenames(context);
   let figm = serializeFigm(context);
   let json = serializeJson(context);
   if (figm.length > 250_000 || json.length > 250_000) {
@@ -804,42 +814,53 @@ function filenameExtension(filename: string): string | undefined {
 export interface AssetExportProgress {
   completed: number;
   total: number;
-  asset: AssetDescriptor;
 }
+
+const HANDOFF_BATCH_SIZE = 4;
 
 export async function prepareHandoffAssets(
   output: GeneratedOutput,
   onProgress?: (progress: AssetExportProgress) => void,
 ): Promise<PreparedAsset[]> {
   const required = retainedAssets(output.context);
-  const extensions = new Map<string, string>();
-  const exported: PreparedAsset[] = [];
-  for (const [index, asset] of required.entries()) {
-    let result: Awaited<ReturnType<typeof exportAsset>>;
-    try {
-      result = await exportAsset(asset, true);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "The asset could not be exported";
-      throw new Error(`Required asset "${asset.name}" failed: ${detail}`);
-    }
-    asset.status = "available";
-    const extension = filenameExtension(result.filename);
-    if (extension) extensions.set(asset.id, extension);
-    exported.push({
-      id: asset.id,
-      filename: asset.filename,
-      mime: result.mime,
-      data: result.data,
-    });
-    onProgress?.({ completed: index + 1, total: required.length, asset });
+  const exported: { asset: AssetDescriptor; result: Awaited<ReturnType<typeof exportAsset>> }[] =
+    [];
+  for (let start = 0; start < required.length; start += HANDOFF_BATCH_SIZE) {
+    const batch = required.slice(start, start + HANDOFF_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (asset) => {
+        try {
+          return { asset, result: await exportAsset(asset, true) };
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : "The asset could not be exported";
+          throw new Error(`Required asset "${asset.name}" failed: ${detail}`);
+        }
+      }),
+    );
+    exported.push(...results);
+    onProgress?.({ completed: exported.length, total: required.length });
   }
-  assignAssetFilenames(output.context, extensions);
-  refreshOutput(output);
-  return exported.map(({ id, mime, data }) => {
-    const asset = output.context.assets.find((item) => item.id === id);
-    if (!asset) throw new Error(`Prepared asset ${id} disappeared from the handoff`);
-    return { id, filename: assetPath(asset), mime, data };
-  });
+
+  if (
+    exported.some(
+      ({ asset, result }) => asset.status !== "available" || asset.filename !== result.filename,
+    )
+  ) {
+    const extensions = new Map<string, string>();
+    for (const { asset, result } of exported) {
+      asset.status = "available";
+      const extension = filenameExtension(result.filename);
+      if (extension) extensions.set(asset.id, extension);
+    }
+    assignAssetFilenames(output.context, extensions);
+    refreshOutput(output);
+  }
+  return exported.map(({ asset, result: { mime, data } }) => ({
+    id: asset.id,
+    filename: assetPath(asset),
+    mime,
+    data,
+  }));
 }
 
 export async function exportAsset(

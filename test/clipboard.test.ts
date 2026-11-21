@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   type ClipboardAsset,
-  supportsImageClipboard,
+  supportsClipboardWrite,
   writeAssetToClipboard,
 } from "../src/clipboard";
 
 test("detects Figma environments without the image clipboard API", (t) => {
   mockClipboard(t);
-  assert.equal(supportsImageClipboard(), true);
+  assert.equal(supportsClipboardWrite(), true);
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: {} });
-  assert.equal(supportsImageClipboard(), false);
+  assert.equal(supportsClipboardWrite(), false);
 });
 
 function mockClipboard(t: test.TestContext, failure?: Error) {

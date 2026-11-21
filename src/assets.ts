@@ -51,14 +51,21 @@ function assetExtension(asset: AssetDescriptor, extensions: Map<string, string>)
   return safeExtension(extensions.get(asset.id) ?? extensionFromFilename(asset.filename));
 }
 
-function uniqueFilename(base: string, used: Set<string>): string {
+function uniqueFilename(base: string, nextSuffix: Map<string, number>): string {
+  let suffix = nextSuffix.get(base);
+  if (suffix === undefined) {
+    nextSuffix.set(base, 2);
+    return base;
+  }
   const dot = base.lastIndexOf(".");
   const stem = dot > 0 ? base.slice(0, dot) : base;
   const extension = dot > 0 ? base.slice(dot) : "";
-  let candidate = base;
-  let suffix = 2;
-  while (used.has(candidate.toLowerCase())) candidate = `${stem}-${suffix++}${extension}`;
-  used.add(candidate.toLowerCase());
+  let candidate: string;
+  do {
+    candidate = `${stem}-${suffix++}${extension}`;
+  } while (nextSuffix.has(candidate));
+  nextSuffix.set(base, suffix);
+  nextSuffix.set(candidate, 2);
   return candidate;
 }
 
@@ -66,9 +73,9 @@ export function assignAssetFilenames(
   context: DesignContext,
   extensions: Map<string, string> = new Map(),
 ): void {
-  const used = new Set<string>();
+  const nextSuffix = new Map<string, number>();
   for (const asset of [...context.assets].sort((a, b) => a.id.localeCompare(b.id))) {
     const base = `${assetStem(asset)}.${assetExtension(asset, extensions)}`;
-    asset.filename = uniqueFilename(base, used);
+    asset.filename = uniqueFilename(base, nextSuffix);
   }
 }

@@ -85,6 +85,7 @@ npm test            # serializers, snapshots, assets, and Wasm parity checks
 npm run benchmark   # o200k_base token comparison
 npm run benchmark:performance # ZIP/checksum timings, including copies into Wasm
 npm run benchmark:copy # FIGM formatting
+npm run benchmark:handoff # extraction through ZIP for repeated icons, with mocked Figma exports
 npm run benchmark:logic # 2k/10k/20k-layer CPU benchmarks, including Wasm copies
 npm run test:rust    # Rust checksum and snapshot hash checks
 npm run build       # dist/code.js and dist/ui.html

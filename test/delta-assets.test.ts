@@ -5,6 +5,23 @@ import { serializeJson } from "../src/serialize";
 import { snapshotIdFromJson } from "../src/snapshot-hash";
 import { fixtureContext } from "./fixture";
 
+test("delta comparison preserves JSON equality and detects nested array edits", () => {
+  const baseline = fixtureContext();
+  const root = baseline.roots[0];
+  assert.ok(root);
+  root.geometry = { width: 50, custom: [1, { x: null, y: 3 }] };
+  const current = structuredClone(baseline);
+  const other = current.roots[0];
+  assert.ok(other);
+  other.geometry = { custom: [1, { y: 3, x: Number.NaN }], width: 50 };
+  assert.equal(compareContexts(baseline, current).changed, false);
+  other.geometry.custom = [{ y: 3, x: null }, 1];
+  assert.deepEqual(
+    compareContexts(baseline, current).changes.updated.map(({ id }) => id),
+    [root.id],
+  );
+});
+
 test("removing a descendant invalidates its ancestor screenshot", () => {
   const baseline = fixtureContext();
   const root = baseline.roots[0];

@@ -1,5 +1,5 @@
 import { assetPath, retainedAssetIds, retainedAssets } from "./assets";
-import { stableStringify } from "./plain";
+import { isRecord, stableStringify } from "./plain";
 import type {
   AssetDescriptor,
   DefinitionTable,
@@ -75,8 +75,33 @@ function nodeProperties(node: DesignNode): JsonObject {
   return properties;
 }
 
+function equalFields(value: unknown, other: unknown): boolean {
+  if (value === other) return true;
+  if (Array.isArray(value)) {
+    if (!Array.isArray(other) || value.length !== other.length) return false;
+    for (let index = 0; index < value.length; index++) {
+      if (!equalFields(value[index], other[index])) return false;
+    }
+    return true;
+  }
+  if (!isRecord(value) || !isRecord(other)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === Object.keys(other).length &&
+    keys.every(
+      (key) =>
+        Object.getOwnPropertyDescriptor(other, key) !== undefined &&
+        equalFields(value[key], other[key]),
+    )
+  );
+}
+
 function same(value: unknown, other: unknown): boolean {
-  return stableStringify(value as object, 0) === stableStringify(other as object, 0);
+  // Keep JSON equivalence for values such as non-finite numbers, which serialize as null.
+  return (
+    equalFields(value, other) ||
+    stableStringify(value as object, 0) === stableStringify(other as object, 0)
+  );
 }
 
 function position(item: FlattenedNode): NodePosition {

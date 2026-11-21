@@ -38,6 +38,7 @@ function mockFigma(t: test.TestContext, failResources = false, hangResources = f
   const nested = node("nested", "INSTANCE");
   const hidden = node("hidden", "INSTANCE", false);
   const child = { ...node("child", "INSTANCE"), children: [nested, hidden] };
+  const rawNested = { id: "nested", type: "INSTANCE" };
   const raw = {
     id: "root",
     type: "FRAME",
@@ -45,10 +46,7 @@ function mockFigma(t: test.TestContext, failResources = false, hangResources = f
       {
         id: "child",
         type: "INSTANCE",
-        children: [
-          { id: "nested", type: "INSTANCE" },
-          { id: "hidden", type: "INSTANCE", visible: false },
-        ],
+        children: [rawNested, { id: "hidden", type: "INSTANCE", visible: false }],
       },
     ],
   };
@@ -78,10 +76,36 @@ function mockFigma(t: test.TestContext, failResources = false, hangResources = f
     if (original) Object.defineProperty(globalThis, "figma", original);
     else Reflect.deleteProperty(globalThis, "figma");
   });
-  return { calls, imageReads: () => imageReads, resources };
+  return { calls, imageReads: () => imageReads, resources, child, nested, rawNested };
 }
 
 const options = { includeHidden: false, includeAllVariantsAndModes: false };
+
+test("handoff keeps instances when Figma cannot read their component properties", async (t) => {
+  const { child, nested, rawNested } = mockFigma(t);
+  const message = "in get_componentProperties: Component set for node has existing errors";
+  Object.defineProperty(nested, "componentProperties", {
+    get() {
+      throw new Error(message);
+    },
+  });
+  const properties = { State: { type: "VARIANT", value: "Selected" } };
+  Object.assign(rawNested, { componentProperties: properties });
+  Object.assign(child, { componentProperties: properties });
+
+  const output = await extractSelection(options);
+  const [root] = output.context.roots;
+  const parent = root?.children?.[0];
+  const instance = parent?.children?.[0];
+  assert.equal(output.nodeCount, 3);
+  assert.deepEqual(parent?.component?.properties, properties);
+  assert.equal(instance?.component?.mainComponent, "main");
+  assert.deepEqual(instance?.component?.componentProperties, properties);
+  assert.deepEqual(output.context.warnings, [
+    { code: "COMPONENT_PROPERTIES_UNAVAILABLE", message, nodeId: "nested" },
+  ]);
+  assert.ok((await prepareHandoffAssets(output)).some((asset) => asset.id === "image:image"));
+});
 
 test("copy batches subtree resources, preserves inherited links, and never reads image bytes", async (t) => {
   const mock = mockFigma(t);
@@ -110,6 +134,66 @@ test("copy batches subtree resources, preserves inherited links, and never reads
   assert.match(image.filename, /\.png$/);
   assert.ok(output.figm.includes(image.filename));
   assert.equal(mock.imageReads(), 2, "read once per requested individual or bundle download");
+});
+
+test("handoff overlaps asset reads with a limit and keeps archive order", async (t) => {
+  mockFigma(t);
+  const output = await extractSelection(options);
+  const root = output.context.roots[0];
+  const raster = output.context.assets.find((asset) => asset.kind === "raster");
+  assert.ok(root && raster);
+  root.assetRefs ??= [];
+  for (let i = 0; i < 7; i += 1) {
+    const id = `image:${i}`;
+    output.context.assets.push({ ...raster, id, imageHash: id });
+    root.assetRefs.push(id);
+  }
+
+  let active = 0;
+  let peak = 0;
+  const png = new Uint8Array([137, 80, 78, 71]);
+  t.mock.method(figma, "getImageByHash", () => ({
+    getBytesAsync: async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      active -= 1;
+      return png;
+    },
+  }));
+  const progress: number[] = [];
+  const assets = await prepareHandoffAssets(output, ({ completed }) => progress.push(completed));
+
+  assert.equal(peak, 4);
+  assert.deepEqual(progress, [4, 8, 9]);
+  assert.deepEqual(
+    assets.map(({ id }) => id),
+    [...output.context.assets].sort((a, b) => a.id.localeCompare(b.id)).map(({ id }) => id),
+  );
+  assert.equal(new Set(assets.map(({ filename }) => filename)).size, assets.length);
+  for (const { filename } of assets) assert.ok(output.figm.includes(`file="${filename}"`));
+});
+
+test("handoff reuses formatted output when exported asset metadata is already current", async (t) => {
+  const mock = mockFigma(t);
+  const output = await extractSelection(options);
+  const files = await prepareHandoffAssets(output);
+  Object.freeze(output);
+  assert.deepEqual(await prepareHandoffAssets(output), files);
+  assert.equal(mock.imageReads(), 2);
+});
+
+test("a failed asset export leaves the cached output untouched", async (t) => {
+  mockFigma(t);
+  const output = await extractSelection(options);
+  const raster = output.context.assets.find((asset) => asset.kind === "raster");
+  assert.ok(raster);
+  raster.status = "unavailable";
+  const before = structuredClone(output);
+  t.mock.method(figma, "getNodeByIdAsync", async () => null);
+
+  await assert.rejects(prepareHandoffAssets(output), /Required asset "Image" failed/);
+  assert.deepEqual(output, before);
 });
 
 test("failed subtree resource lookup reports one warning and still exports nested components", async (t) => {
