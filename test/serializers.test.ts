@@ -498,16 +498,6 @@ test("plugin UI keeps every scripted control and result target", () => {
   assert.doesNotMatch(html, /https?:\/\//, "the local-only UI must not load remote resources");
 });
 
-test("copy actions copy generated output when processing finishes", () => {
-  const ui = readFileSync("src/ui.ts", "utf8");
-  assert.match(ui, /await copyText\(kind === "ai" \? output\.ai : output\.json\)/);
-  const start = ui.lastIndexOf('if (message.type === "RESULT")');
-  assert.notEqual(start, -1);
-  const resultHandler = ui.slice(start);
-  assert.match(resultHandler, /await copyOutput\(\s*action\.kind,\s*message\.output,/);
-  assert.doesNotMatch(resultHandler, /click .* again to copy/);
-});
-
 test("AI loading follows generation and clipboard work, and clears on interruption or failure", async (t) => {
   const mockElement = () => {
     const attributes = new Map<string, string>();
@@ -555,8 +545,15 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   let copied = "";
   let legacyCopied = "";
   let allowLegacyCopy = false;
+  let clickActive = false;
+  let requireActivation = true;
+  let denyDeferredCopy = false;
+  let deferredData: Promise<Blob> | undefined;
   const globals = {
     window: pluginWindow,
+    ClipboardItem: class {
+      constructor(public data: Record<string, Promise<Blob>>) {}
+    },
     document: {
       getElementById: (id: string) => elements.get(id),
       createElement: () => {
@@ -577,8 +574,22 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
     },
     navigator: {
       clipboard: {
+        write: async ([item]: Array<{ data: Record<string, Promise<Blob>> }>) => {
+          assert.ok(clickActive, "the deferred clipboard write must start during the click");
+          deferredData = item?.data["text/plain"];
+          assert.ok(deferredData);
+          if (denyDeferredCopy) throw new Error("Clipboard write blocked by Figma");
+          const blob = await deferredData;
+          copied = await blob.text();
+          await new Promise<void>((resolve) => {
+            finishCopy = resolve;
+          });
+        },
         writeText: (text: string) => {
           copyAttempts += 1;
+          if (requireActivation && !clickActive) {
+            return Promise.reject(new Error("The click has expired"));
+          }
           copied = text;
           return failCopy
             ? Promise.reject(new Error("Clipboard unavailable"))
@@ -600,7 +611,14 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   await import("../src/ui");
   const send = (pluginMessage: PluginToUiMessage) =>
     pluginWindow.onmessage({ data: { pluginMessage } });
-  const click = (id: string) => get(id).dispatchEvent(new Event("click"));
+  const click = (id: string) => {
+    clickActive = true;
+    try {
+      get(id).dispatchEvent(new Event("click"));
+    } finally {
+      clickActive = false;
+    }
+  };
   const idle = () => {
     assert.notEqual(get("copy-ai").getAttribute("aria-busy"), "true");
     assert.equal(get("copy-ai-label").textContent, "Copy for AI");
@@ -620,24 +638,40 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   assert.ok(request?.type === "GENERATE");
   const context = fixtureContext();
   const ai = serializeForAi(context);
+  const output = {
+    context,
+    ai,
+    figm: serializeFigm(context),
+    json: serializeJson(context),
+    nodeCount: 4,
+  };
   const result = send({
     ...request,
     type: "RESULT",
-    output: {
-      context,
-      ai,
-      figm: serializeFigm(context),
-      json: serializeJson(context),
-      nodeCount: 4,
-    },
+    output,
   });
   assert.equal(get("copy-ai-label").textContent, "Copying…");
   assert.equal(get("copy-ai").getAttribute("aria-busy"), "true");
-  assert.equal(copied, ai);
+  await new Promise<void>((resolve) => setImmediate(resolve));
   finishCopy();
   await result;
+  assert.equal(get("status").textContent, "Copied FIGM/1 context · baseline updated");
+  assert.equal(copied, ai);
   idle();
 
+  await send({ type: "STALE", revision: 1 });
+  denyDeferredCopy = true;
+  allowLegacyCopy = true;
+  click("copy-json");
+  const jsonRequest = sent[sent.length - 1];
+  assert.ok(jsonRequest?.type === "GENERATE");
+  await send({ ...jsonRequest, type: "RESULT", output });
+  assert.equal(legacyCopied, output.json, "a denied deferred write falls back to legacy copy");
+  assert.equal(get("status").textContent, "Copied JSON context");
+  allowLegacyCopy = false;
+  denyDeferredCopy = false;
+
+  requireActivation = false;
   click("copy-ai");
   assert.equal(get("copy-ai-label").textContent, "Copying…", "cached output still shows copying");
   finishCopy();
@@ -691,20 +725,26 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   assert.equal(unnamedRequest.options.omitLayerNames, true);
   assert.notEqual(unnamedRequest.scopeKey, request.scopeKey);
 
-  await send({ type: "STALE", revision: 1 });
+  assert.ok(deferredData);
+  await send({ type: "STALE", revision: 2 });
+  await send({ ...unnamedRequest, type: "RESULT", output });
+  await assert.rejects(deferredData, /Copy canceled/);
   click("copy-ai");
   const replacementRequest = sent[sent.length - 1];
   assert.ok(replacementRequest?.type === "GENERATE");
-  await send({ type: "STALE", requestId: unnamedRequest.requestId, revision: 1 });
+  await send({ type: "STALE", requestId: unnamedRequest.requestId, revision: 2 });
   assert.equal(
     get("copy-ai-label").textContent,
     "Preparing context…",
     "a late stale reply for an old request must not cancel a newer request",
   );
-  await send({ type: "ERROR", message: "Export failed" });
+  assert.ok(deferredData);
+  await send({ type: "ERROR", requestId: replacementRequest.requestId, message: "Export failed" });
+  await assert.rejects(deferredData, /Copy canceled/);
+  assert.equal(get("status").textContent, "Export failed");
   idle();
   click("copy-ai");
-  await send({ type: "STALE", revision: 2 });
+  await send({ type: "STALE", revision: 3 });
   idle();
   click("copy-ai");
   get("include-hidden").dispatchEvent(new Event("change"));
@@ -774,13 +814,6 @@ test("AI loading follows generation and clipboard work, and clears on interrupti
   await send({ type: "ERROR", requestId: imageRequest.requestId, message: "Selection failed" });
   assert.equal(get("status").textContent, "Selection failed");
 
-  const originalClipboardItem = Object.getOwnPropertyDescriptor(globalThis, "ClipboardItem");
-  Object.defineProperty(globalThis, "ClipboardItem", { configurable: true, value: class {} });
-  t.after(() => {
-    if (originalClipboardItem)
-      Object.defineProperty(globalThis, "ClipboardItem", originalClipboardItem);
-    else Reflect.deleteProperty(globalThis, "ClipboardItem");
-  });
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: {

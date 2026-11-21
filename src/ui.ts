@@ -1,5 +1,10 @@
 import { retainedAssets } from "./assets";
-import { supportsImageClipboard, writeAssetToClipboard } from "./clipboard";
+import {
+  type PendingTextCopy,
+  startTextCopy,
+  supportsClipboardWrite,
+  writeAssetToClipboard,
+} from "./clipboard";
 import { compareContexts, serializeDelta } from "./delta";
 import type { PluginToUiMessage, UiToPluginMessage } from "./messages";
 import { groupWarnings, sanitizeFilename } from "./plain";
@@ -41,7 +46,13 @@ const assetClipboardNotice = element<HTMLElement>("asset-clipboard-notice");
 
 type ActionKind = "ai" | "json" | "preview" | "changes";
 type PendingAction =
-  | { kind: ActionKind; scopeKey: string; revision: number; viewRevision: number }
+  | {
+      kind: ActionKind;
+      scopeKey: string;
+      revision: number;
+      viewRevision: number;
+      clipboard?: PendingTextCopy;
+    }
   | {
       kind: "asset";
       asset: AssetDescriptor;
@@ -176,6 +187,7 @@ function invalidateView(): void {
   viewRevision += 1;
   for (const action of pending.values()) {
     if (action.kind === "asset") action.reject(new Error("The design changed; generate again."));
+    else if ("clipboard" in action) action.clipboard?.cancel();
   }
   pending.clear();
   bundleAssets.clear();
@@ -217,7 +229,12 @@ function requestGenerate(kind: ActionKind): void {
   void prewarmWasm();
   const id = ++requestId;
   const scopeKey = currentScopeKey();
-  pending.set(id, { kind, scopeKey, revision: pluginRevision, viewRevision });
+  const action: PendingAction = { kind, scopeKey, revision: pluginRevision, viewRevision };
+  if (kind === "ai" || kind === "json") {
+    const clipboard = startTextCopy();
+    if (clipboard) action.clipboard = clipboard;
+  }
+  pending.set(id, action);
   setBusy(
     kind === "preview" ? "Preparing assets…" : "Generating design context…",
     kind === "ai" ? "Preparing context…" : undefined,
@@ -247,25 +264,26 @@ async function copyOutput(
   scopeKey: string,
   actionRevision: number,
   actionViewRevision: number,
+  clipboard?: PendingTextCopy,
 ): Promise<void> {
+  const isCurrent = () =>
+    scopeKey === currentScopeKey() &&
+    actionRevision === pluginRevision &&
+    actionViewRevision === viewRevision;
   setBusy("Copying design context…", kind === "ai" ? "Copying…" : undefined);
   try {
-    await copyText(kind === "ai" ? output.ai : output.json);
-    if (
-      scopeKey !== currentScopeKey() ||
-      actionRevision !== pluginRevision ||
-      actionViewRevision !== viewRevision
-    ) {
-      setReady("The design changed; generate again to refresh output");
-      return;
-    }
+    const text = kind === "ai" ? output.ai : output.json;
+    const copied = clipboard ? await clipboard.finish(text) : false;
+    if (!isCurrent()) return;
+    if (!copied) await copyText(text);
+    if (!isCurrent()) return;
     if (kind === "ai") establishBaseline(output, scopeKey);
     setReady(
       kind === "ai" ? "Copied FIGM/1 context · baseline updated" : "Copied JSON context",
       "success",
     );
   } catch (error) {
-    setError(error instanceof Error ? error.message : "Copy failed");
+    if (isCurrent()) setError(error instanceof Error ? error.message : "Copy failed");
   }
 }
 
@@ -351,7 +369,7 @@ async function copyAsset(asset: AssetDescriptor): Promise<void> {
       await copyText(
         typeof result.data === "string" ? result.data : new TextDecoder().decode(result.data),
       );
-    } else if (!supportsImageClipboard()) {
+    } else if (!supportsClipboardWrite()) {
       selectAsset(asset);
       return;
     } else {
@@ -426,7 +444,7 @@ function renderOutput(output: GeneratedOutput): void {
   }
 
   assetsList.replaceChildren();
-  const canCopyImages = supportsImageClipboard();
+  const canCopyImages = supportsClipboardWrite();
   assetClipboardNotice.classList.toggle(
     "hidden",
     canCopyImages || !output.context.assets.some((asset) => asset.kind !== "vector"),
@@ -622,6 +640,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
       action.reject(new Error(message.message));
       return;
     }
+    if (action && "clipboard" in action) action.clipboard?.cancel();
     setError(
       action?.kind === "handoff"
         ? `Handoff failed: ${message.message}. Retry the download.`
@@ -695,6 +714,7 @@ window.onmessage = async (event: MessageEvent<{ pluginMessage?: PluginToUiMessag
       action.scopeKey,
       action.revision,
       action.viewRevision,
+      action.clipboard,
     );
   }
 };
